@@ -231,8 +231,7 @@ Goodell et al. (2017) provide a detailed investigation of DAPK1 dynamics.
 
 * more explicit division relationship between CaMKII and DAPK1?
 
-* have ability to record two parallel cases (50/50 vs. 50/25) and compare directly across them
-
+* add an abstract model with just integration of Ca at 2 diff rate constants, as in current XCAL, and compare that -- time to try a more top-down approach again to see what that looks like. To first approximation, DAPK1 and CaMKII are just integrating Ca with different dynamics..
 
 # References
 
