@@ -109,24 +109,24 @@ func (as *AMPARState) Init() {
 
 		if TheOpts.UseDAPK1 {
 			vol := float64(CytVol)
-			as.Int.DD = chem.CoToN(4.958e+06, vol)
-			as.Int.PD = chem.CoToN(3.93e+07, vol)
-			as.Int.DP = chem.CoToN(0, vol)
-			as.Int.PP = chem.CoToN(0, vol)
-			as.Mbr.DD = chem.CoToN(4245, vol)
-			as.Mbr.PD = chem.CoToN(1.275e+06, vol)
-			as.Mbr.DP = chem.CoToN(306.8, vol)
-			as.Mbr.PP = chem.CoToN(0, vol)
+			as.Int.DD = chem.CoToN(2.988, vol)
+			as.Int.PD = chem.CoToN(3.015, vol)
+			as.Int.DP = chem.CoToN(0.0008082, vol)
+			as.Int.PP = chem.CoToN(0.0006068, vol)
+			as.Mbr.DD = chem.CoToN(0.005805, vol)
+			as.Mbr.PD = chem.CoToN(0.03338, vol)
+			as.Mbr.DP = chem.CoToN(0.000209, vol)
+			as.Mbr.PP = chem.CoToN(0.0005641, vol)
 			vol = PSDVol
-			as.PSD.DD = chem.CoToN(4.682e+04, vol)
-			as.PSD.PD = chem.CoToN(7.514e+05, vol)
-			as.PSD.DP = chem.CoToN(1.53e+04, vol)
-			as.PSD.PP = chem.CoToN(1.893e+05, vol)
-			as.Trp.DD = chem.CoToN(0.4077, vol)
-			as.Trp.PD = chem.CoToN(2.383, vol)
-			as.Trp.DP = chem.CoToN(0.1667, vol)
-			as.Trp.PP = chem.CoToN(1.043, vol)
-			as.Scaffold = chem.CoToN(1.056e-06, PSDVol)
+			as.PSD.DD = chem.CoToN(0.1778, vol)
+			as.PSD.PD = chem.CoToN(0.2408, vol)
+			as.PSD.DP = chem.CoToN(0.01244, vol)
+			as.PSD.PP = chem.CoToN(0.01677, vol)
+			as.Trp.DD = chem.CoToN(1.341, vol)
+			as.Trp.PD = chem.CoToN(1.782, vol)
+			as.Trp.DP = chem.CoToN(0.1076, vol)
+			as.Trp.PP = chem.CoToN(0.143, vol)
+			as.Scaffold = chem.CoToN(0.6267, vol)
 		} else {
 			as.Scaffold = chem.CoToN(2.279, PSDVol)
 			vol := float64(CytVol)
@@ -198,14 +198,16 @@ func (as *AMPARState) ConfigLog(sch *etable.Schema) {
 // AMPAR phosphorylation and trafficking parameters
 // Original kinetic rate constants are in units of (μM-1s-1),
 type AMPARPhosParams struct {
-	PKA       chem.SimpleEnz `desc:"rate of phosphorylation of AMPA Ser845 by PKA"`
-	CaMKII    chem.SimpleEnz `desc:"rate of phosphorylation of PDZs by CaMKII"`
-	PP_S845   chem.SimpleEnz `desc:"rate of dephosphorylation of AMPA Ser845 by PP1"`
-	PP_PDZs   chem.SimpleEnz `desc:"rate of dephosphorylation of PDZs by PP1"`
-	CaN_S845  chem.SimpleEnz `desc:"rate of dephosphorylation of AMPA Ser845 by CaN"`
-	CaN_PDZs  chem.SimpleEnz `desc:"rate of dephosphorylation of PDZs by CaN"`
-	PP2A_S845 chem.SimpleEnz `desc:"rate of dephosphorylation of AMPA Ser845 by PP2A"`
-	PP2A_PDZs chem.SimpleEnz `desc:"rate of dephosphorylation of PDZs by PP2A"`
+	PKA         chem.SimpleEnz `desc:"rate of phosphorylation of AMPA Ser845 by PKA"`
+	CaMKII      chem.SimpleEnz `desc:"rate of phosphorylation of PDZs by CaMKII"`
+	PP_S845     chem.SimpleEnz `desc:"rate of dephosphorylation of AMPA Ser845 by PP1"`
+	PP_PDZs     chem.SimpleEnz `desc:"rate of dephosphorylation of PDZs by PP1"`
+	CaN_S845    chem.SimpleEnz `desc:"rate of dephosphorylation of AMPA Ser845 by CaN"`
+	CaN_PDZs    chem.SimpleEnz `desc:"rate of dephosphorylation of PDZs by CaN"`
+	PP2A_S845   chem.SimpleEnz `desc:"rate of dephosphorylation of AMPA Ser845 by PP2A"`
+	PP2A_PDZs   chem.SimpleEnz `desc:"rate of dephosphorylation of PDZs by PP2A"`
+	DAPK1_AMPAR float64        `desc:"multiplier for DAPK1 relative to CaMKII"`
+	DAPK1lrate  float64        `desc:"multiplier for diff between DAPK1 and CaMKII"`
 }
 
 func (ap *AMPARPhosParams) Defaults() {
@@ -217,16 +219,17 @@ func (ap *AMPARPhosParams) Defaults() {
 	ap.CaN_PDZs.Kf = 1
 	ap.PP2A_S845.Kf = 4
 	ap.PP2A_PDZs.Kf = 100
+	ap.DAPK1_AMPAR = 1
+	ap.DAPK1lrate = 10
 }
-
-var DAPK1_AMPAR = 2.0
 
 // StepP updates the phosphorylation d=delta state from c=current
 // based on current kinase / pp states
 func (ap *AMPARPhosParams) StepP(c, d *AMPARVars, vol, camkii, dapk1, can, pka, pp1 float64) {
 	if TheOpts.UseDAPK1 {
-		camkii -= DAPK1_AMPAR * dapk1
+		camkii -= ap.DAPK1lrate * (ap.DAPK1_AMPAR * dapk1)
 		if camkii < 0 {
+			pp1 = -camkii
 			camkii = 0
 		}
 	}
@@ -315,8 +318,13 @@ func (ap *AMPARParams) Defaults() {
 func (ap *AMPARParams) Step(c, d *AMPARState, cas *CaSigState, pp2a float64) {
 	ap.Phos.StepP(&c.Int, &d.Int, CytVol, cas.CaMKII.Cyt.Auto.Act, cas.DAPK1.Cyt.Auto.Act, cas.CaN.Cyt.CaNact, cas.PKA.Cyt.PKAact, cas.PP1.Cyt.PP1act)
 	ap.Phos.StepP(&c.Mbr, &d.Mbr, CytVol, cas.CaMKII.Cyt.Auto.Act, cas.DAPK1.Cyt.Auto.Act, cas.CaN.Cyt.CaNact, cas.PKA.Cyt.PKAact, cas.PP1.Cyt.PP1act)
-	ap.Phos.StepP(&c.Trp, &d.Trp, PSDVol, cas.CaMKII.PSD.Auto.Act, cas.DAPK1.PSD.Auto.Act, cas.CaN.PSD.CaNact, cas.PKA.PSD.PKAact, cas.PP1.PSD.PP1act)
-	ap.Phos.StepP(&c.PSD, &d.PSD, PSDVol, cas.CaMKII.PSD.Auto.Act, cas.DAPK1.PSD.Auto.Act, cas.CaN.PSD.CaNact, cas.PKA.PSD.PKAact, cas.PP1.PSD.PP1act)
+	if TheOpts.UseN2B {
+		ap.Phos.StepP(&c.Trp, &d.Trp, PSDVol, cas.CaMKII.PSD.Auto.N2B, cas.DAPK1.PSD.Auto.N2B, cas.CaN.PSD.CaNact, cas.PKA.PSD.PKAact, cas.PP1.PSD.PP1act)
+		ap.Phos.StepP(&c.PSD, &d.PSD, PSDVol, cas.CaMKII.PSD.Auto.N2B, cas.DAPK1.PSD.Auto.N2B, cas.CaN.PSD.CaNact, cas.PKA.PSD.PKAact, cas.PP1.PSD.PP1act)
+	} else {
+		ap.Phos.StepP(&c.Trp, &d.Trp, PSDVol, cas.CaMKII.PSD.Auto.Act, cas.DAPK1.PSD.Auto.Act, cas.CaN.PSD.CaNact, cas.PKA.PSD.PKAact, cas.PP1.PSD.PP1act)
+		ap.Phos.StepP(&c.PSD, &d.PSD, PSDVol, cas.CaMKII.PSD.Auto.Act, cas.DAPK1.PSD.Auto.Act, cas.CaN.PSD.CaNact, cas.PKA.PSD.PKAact, cas.PP1.PSD.PP1act)
+	}
 
 	ap.Phos.StepPP2A(&c.Int, &d.Int, CytVol, pp2a) // Cyt only
 	ap.Phos.StepPP2A(&c.Mbr, &d.Mbr, CytVol, pp2a) // Cyt only

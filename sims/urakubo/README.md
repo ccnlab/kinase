@@ -223,8 +223,16 @@ Goodell et al. (2017) provide a detailed investigation of DAPK1 dynamics.
 
 * CaN is the primary source of dephosphorylation at S308, such that CaN is primary initiator of DAPK1 binding to GluN2B.  CaN is directly activated by Ca/CaM, so it is in a good position to detect the onset of a learning window, opening up the DAPK1 to be sensitive to further Ca levels.  It is unclear (yet) if PP1 and PP2A, which dephosphorylate the T286 site on CaMKII, might also play a similar role on DAPK1, and if not, why not?  PP1 does de-activate CaN however, so indirectly it is having that effect, and it may thus set the overall time window for a given plasticity event.
 
-* In summary, at the most abstract, computational level, CaMKII represents the plus phase $<xy>_s$ signal, and DAPK1 represents the minus phase $<xy>_m$ signal, in terms of time-integrated Ca++ signals across these phases. These two kinases share many properties, but differ critically in their signs (at multiple levels), and this makes them work just like a classic opponent-process: Go - NoGo, excitation vs. inhibition, etc. They both compete at the NMDA GluN2B site, so that is the final locus of the opponent competitive dynamic. If DAPK1 wins, LTD happens.
-If CaMKII wins, LTP happens. If there is a tie, nothing happens! Perfect error-driven learning! Furthermore, both rely on a similar auto-phosphorylation (autoP) dynamic to integrate over recent synaptic activity.
+* In summary, at the most abstract, computational level, CaMKII represents the plus phase $<xy>_s$ signal, and DAPK1 represents the minus phase $<xy>_m$ signal, in terms of time-integrated Ca++ signals across these phases. These two kinases share many properties, but differ critically in their signs (at multiple levels), and this makes them work just like a classic opponent-process: Go - NoGo, excitation vs. inhibition, etc. They both compete at the NMDA GluN2B site, so that is the final locus of the opponent competitive dynamic. If DAPK1 wins, LTD happens. If CaMKII wins, LTP happens. If there is a tie, nothing happens! Perfect error-driven learning! Furthermore, both rely on a similar auto-phosphorylation (autoP) dynamic to integrate over recent synaptic activity.
+
+# TODO
+
+* restrict GluN2BN?
+
+* more explicit division relationship between CaMKII and DAPK1?
+
+* have ability to record two parallel cases (50/50 vs. 50/25) and compare directly across them
+
 
 # References
 
@@ -259,3 +267,4 @@ If CaMKII wins, LTP happens. If there is a tie, nothing happens! Perfect error-d
 * Urakubo, H., Honda, M., Froemke, R. C., & Kuroda, S. (2008). Requirement of an allosteric kinetics of NMDA receptors for spike timing-dependent plasticity. *The Journal of Neuroscience, 28(13),* 3310–3323. http://www.ncbi.nlm.nih.gov/pubmed/18367598
 
 * Umemiya, M., Chen, N., Raymond, L. A., & Murphy, T. H. (2001). A Calcium-Dependent Feedback Mechanism Participates in Shaping Single NMDA Miniature EPSCs. Journal of Neuroscience, 21(1), 1–9. https://doi.org/10.1523/JNEUROSCI.21-01-00001.2001
+

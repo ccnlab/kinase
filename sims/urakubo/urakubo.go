@@ -13,9 +13,11 @@ import (
 	"log"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/emer/axon/axon"
 	"github.com/emer/axon/chans"
+	"github.com/emer/emergent/chem"
 	"github.com/emer/emergent/emer"
 	"github.com/emer/emergent/netview"
 	"github.com/emer/emergent/params"
@@ -111,42 +113,39 @@ func (nex *NeuronEx) Init() {
 // as arguments to methods, and provides the core GUI interface (note the view tags
 // for the fields which provide hints to how things should be displayed).
 type Sim struct {
-	Net         *axon.Network    `view:"no-inline" desc:"the network -- click to view / edit parameters for layers, prjns, etc"`
-	Spine       Spine            `desc:"the spine state with Urakubo intracellular model"`
-	Neuron      *axon.Neuron     `view:"no-inline" desc:"the neuron"`
-	NeuronEx    NeuronEx         `view:"no-inline" desc:"extra neuron state for additional channels: VGCC, AK"`
-	Params      params.Sets      `view:"no-inline" desc:"full collection of param sets"`
-	Stim        Stims            `desc:"what stimulation to drive with"`
-	ISISec      float64          `desc:"inter-stimulus-interval in seconds -- between reps"`
-	NReps       int              `desc:"number of repetitions -- takes 100 to produce classic STDP"`
-	FinalSecs   float64          `def:"20,50,100" desc:"number of seconds to run after the manipulation -- results are strongest after 100, decaying somewhat after that point -- 20 shows similar qualitative results but weaker, 50 is pretty close to 100 -- less than 20 not recommended."`
-	DurMsec     int              `desc:"duration for activity window"`
-	SendHz      float32          `desc:"sending firing frequency (used as minus phase for ThetaErr)"`
-	RecvHz      float32          `desc:"receiving firing frequency (used as plus phase for ThetaErr)"`
-	GeStim      float32          `desc:"stimulating current injection"`
-	DeltaT      int              `desc:"in msec, difference of Tpost - Tpre == pos = LTP, neg = LTD STDP"`
-	DeltaTRange int              `desc:"range for sweep of DeltaT -- actual range is - to +"`
-	DeltaTInc   int              `desc:"increment for sweep of DeltaT"`
-	RGClamp     bool             `desc:"use Ge current clamping instead of distrete pulsing for firing rate-based manips, e.g., ThetaErr"`
-	Opts        SimOpts          `view:"inline" desc:"global simulation options controlling major differences in behavior"`
-	DAPK1AutoK  float64          `desc:"strength of AutoK autophosphorylation of DAPK1 -- must be strong enough to balance CaM drive"`
-	DAPK1_AMPAR float64          `desc:"strength of AMPAR inhibitory effect from DAPK1"`
-	CaNDAPK1    float64          `desc:"Km for the CaM dephosphorylation of DAPK1"`
-	VmDend      bool             `desc:"use dendritic Vm signal for driving spine channels"`
-	NMDAAxon    bool             `desc:"use the Axon NMDA channel instead of the allosteric Urakubo one"`
-	NMDAGbar    float32          `def:"0,0.15" desc:"strength of NMDA current -- 0.15 default for posterior cortex"`
-	GABABGbar   float32          `def:"0,0.2" desc:"strength of GABAB current -- 0.2 default for posterior cortex"`
-	VGCC        chans.VGCCParams `desc:"VGCC parameters: set Gbar > 0 to include"`
-	AK          chans.AKParams   `desc:"A-type potassium channel parameters: set Gbar > 0 to include"`
-	CaTarg      CaState          `desc:"target calcium level for CaTarg stim"`
-	InitWt      float64          `inactive:"+" desc:"initial weight value: Trp_AMPA value at baseline"`
-	DWtLog      *etable.Table    `view:"no-inline" desc:"final weight change plot for each condition"`
-	PhaseDWtLog *etable.Table    `view:"no-inline" desc:"minus-plus final weight change plot for each condition"`
-	Msec100Log  *etable.Table    `view:"no-inline" desc:"every 100 msec plot -- a point every 100 msec, shows full run"`
-	Msec10Log   *etable.Table    `view:"no-inline" desc:"every 10 msec plot -- a point every 10 msec, shows last 10 seconds"`
-	MsecLog     *etable.Table    `view:"no-inline" desc:"millisecond level log, shows last second"`
-	AutoKLog    *etable.Table    `view:"no-inline" desc:"autoK data"`
-	GenesisLog  *etable.Table    `view:"no-inline" desc:"genesis data"`
+	Net         *axon.Network            `view:"no-inline" desc:"the network -- click to view / edit parameters for layers, prjns, etc"`
+	Spine       Spine                    `desc:"the spine state with Urakubo intracellular model"`
+	Neuron      *axon.Neuron             `view:"no-inline" desc:"the neuron"`
+	NeuronEx    NeuronEx                 `view:"no-inline" desc:"extra neuron state for additional channels: VGCC, AK"`
+	Params      params.Sets              `view:"no-inline" desc:"full collection of param sets"`
+	Stim        Stims                    `desc:"what stimulation to drive with"`
+	ISISec      float64                  `desc:"inter-stimulus-interval in seconds -- between reps"`
+	NReps       int                      `desc:"number of repetitions -- takes 100 to produce classic STDP"`
+	FinalSecs   float64                  `def:"20,50,100" desc:"number of seconds to run after the manipulation -- results are strongest after 100, decaying somewhat after that point -- 20 shows similar qualitative results but weaker, 50 is pretty close to 100 -- less than 20 not recommended."`
+	DurMsec     int                      `desc:"duration for activity window"`
+	SendHz      float32                  `desc:"sending firing frequency (used as minus phase for ThetaErr)"`
+	RecvHz      float32                  `desc:"receiving firing frequency (used as plus phase for ThetaErr)"`
+	GeStim      float32                  `desc:"stimulating current injection"`
+	DeltaT      int                      `desc:"in msec, difference of Tpost - Tpre == pos = LTP, neg = LTD STDP"`
+	DeltaTRange int                      `desc:"range for sweep of DeltaT -- actual range is - to +"`
+	DeltaTInc   int                      `desc:"increment for sweep of DeltaT"`
+	RGClamp     bool                     `desc:"use Ge current clamping instead of distrete pulsing for firing rate-based manips, e.g., ThetaErr"`
+	Opts        SimOpts                  `view:"inline" desc:"global simulation options controlling major differences in behavior"`
+	GluN2BN     float64                  `desc:"total initial amount of GluN2B"`
+	DAPK1AutoK  float64                  `desc:"strength of AutoK autophosphorylation of DAPK1 -- must be strong enough to balance CaM drive"`
+	DAPK1_AMPAR float64                  `desc:"strength of AMPAR inhibitory effect from DAPK1"`
+	DAPK1lrate  float64                  `desc:"multiplier for diff between DAPK1 and CaMKII"`
+	CaNDAPK1    float64                  `desc:"Km for the CaM dephosphorylation of DAPK1"`
+	VmDend      bool                     `desc:"use dendritic Vm signal for driving spine channels"`
+	NMDAAxon    bool                     `desc:"use the Axon NMDA channel instead of the allosteric Urakubo one"`
+	NMDAGbar    float32                  `def:"0,0.15" desc:"strength of NMDA current -- 0.15 default for posterior cortex"`
+	GABABGbar   float32                  `def:"0,0.2" desc:"strength of GABAB current -- 0.2 default for posterior cortex"`
+	VGCC        chans.VGCCParams         `desc:"VGCC parameters: set Gbar > 0 to include"`
+	AK          chans.AKParams           `desc:"A-type potassium channel parameters: set Gbar > 0 to include"`
+	CaTarg      CaState                  `desc:"target calcium level for CaTarg stim"`
+	InitWt      float64                  `inactive:"+" desc:"initial weight value: Trp_AMPA value at baseline"`
+	Logs        map[string]*etable.Table `view:"no-inline" desc:"all logs"`
+	Plots       map[string]*eplot.Plot2D `view:"-" desc:"all plots"`
 
 	// internal state - view:"-"
 	Msec         int              `inactive:"+" desc:"current cycle of updating"`
@@ -179,20 +178,13 @@ func (ss *Sim) New() {
 	ss.InitWt = ss.Spine.States.AMPAR.Trp.Tot
 	ss.Net = &axon.Network{}
 	ss.Params = ParamSets
-	ss.DWtLog = &etable.Table{}
-	ss.PhaseDWtLog = &etable.Table{}
-	ss.MsecLog = &etable.Table{}
-	ss.Msec10Log = &etable.Table{}
-	ss.Msec100Log = &etable.Table{}
-	ss.AutoKLog = &etable.Table{}
-	ss.GenesisLog = &etable.Table{}
-	ss.Stim = ThetaErr
+	ss.Stim = ThetaErrComp
 	ss.ISISec = 0.8
-	ss.NReps = 1
+	ss.NReps = 10
 	ss.FinalSecs = 0
 	ss.DurMsec = 200
 	ss.SendHz = 50
-	ss.RecvHz = 50
+	ss.RecvHz = 25
 	ss.DeltaT = 16
 	ss.DeltaTRange = 50
 	ss.DeltaTInc = 5
@@ -204,8 +196,10 @@ func (ss *Sim) New() {
 func (ss *Sim) Defaults() {
 	ss.Opts.Defaults()
 	ss.Spine.Defaults()
+	ss.GluN2BN = 2
 	ss.DAPK1AutoK = DAPK1AutoK
-	ss.DAPK1_AMPAR = DAPK1_AMPAR
+	ss.DAPK1_AMPAR = ss.Spine.AMPAR.Phos.DAPK1_AMPAR
+	ss.DAPK1lrate = ss.Spine.AMPAR.Phos.DAPK1lrate
 	ss.CaNDAPK1 = 11
 	ss.GeStim = 2
 	ss.NMDAGbar = 0.15 // 0.1 to 0.15 matches pre-spike increase in vm
@@ -218,18 +212,47 @@ func (ss *Sim) Defaults() {
 	ss.CaTarg.PSD = 10
 }
 
+func (ss *Sim) Log(name string) *etable.Table {
+	if ss.Logs == nil {
+		ss.Logs = make(map[string]*etable.Table)
+	}
+	dt, ok := ss.Logs[name]
+	if ok {
+		return dt
+	}
+	dt = &etable.Table{}
+	ss.Logs[name] = dt
+	return dt
+}
+
+func (ss *Sim) Plot(name string) *eplot.Plot2D {
+	return ss.Plots[name]
+}
+
+func (ss *Sim) AddPlot(name string, plt *eplot.Plot2D) {
+	if ss.Plots == nil {
+		ss.Plots = make(map[string]*eplot.Plot2D)
+	}
+	ss.Plots[name] = plt
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////
 // 		Configs
 
 // Config configures all the elements using the standard functions
 func (ss *Sim) Config() {
 	ss.ConfigNet(ss.Net)
-	ss.ConfigDWtLog(ss.DWtLog)
-	ss.ConfigPhaseDWtLog(ss.PhaseDWtLog)
-	ss.ConfigTimeLog(ss.MsecLog)
-	ss.ConfigTimeLog(ss.Msec10Log)
-	ss.ConfigTimeLog(ss.Msec100Log)
-	ss.ConfigAutoKLog(ss.AutoKLog)
+	ss.ConfigDWtLog(ss.Log("DWtLog"))
+	ss.ConfigPhaseDWtLog(ss.Log("PhaseDWtLog"))
+	ss.ConfigTimeLog(ss.Log("MsecLog"))
+	ss.ConfigTimeLog(ss.Log("Msec10Log"))
+	ss.ConfigTimeLog(ss.Log("Msec100Log"))
+	ss.ConfigTimeLog(ss.Log("MsecLog2"))
+	ss.ConfigTimeLog(ss.Log("Msec10Log2"))
+	ss.ConfigTimeLog(ss.Log("Msec100Log2"))
+	ss.ConfigAutoKLog(ss.Log("AutoKLog"))
+
+	ss.Log("GenesisLog")
 }
 
 func (ss *Sim) ConfigNet(net *axon.Network) {
@@ -303,8 +326,10 @@ func (ss *Sim) SetParamsSet(setNm string, sheet string, setMsg bool) error {
 // and resets the epoch log table
 func (ss *Sim) Init() {
 	TheOpts = ss.Opts
+	ss.Spine.AMPAR.Phos.DAPK1_AMPAR = ss.DAPK1_AMPAR
+	ss.Spine.AMPAR.Phos.DAPK1lrate = ss.DAPK1lrate
 	DAPK1AutoK = ss.DAPK1AutoK
-	DAPK1_AMPAR = ss.DAPK1_AMPAR
+	ss.Spine.NMDAR.GluN2BN = chem.CoToN(ss.GluN2BN, PSDVol)             // 120 works for N2B only (no DAPK1)
 	ss.Spine.DAPK1.CaNSer308.SetKmVol(ss.CaNDAPK1, CytVol, 1.34, 0.335) // 10: 11 μM Km = 0.0031724
 	ss.Spine.Init()
 	ss.InitWt = ss.Spine.States.AMPAR.Trp.Tot
@@ -406,16 +431,18 @@ func (ss *Sim) NeuronUpdt(msec int, ge, gi float32) {
 }
 
 // LogDefault does default logging for current Msec
-func (ss *Sim) LogDefault() {
+func (ss *Sim) LogDefault(n int) {
+	sfx := ""
+	if n == 1 {
+		sfx = "2"
+	}
 	msec := ss.Msec
-	ss.LogTime(ss.MsecLog, msec%1000)
+	ss.LogTime(ss.Log("MsecLog"+sfx), msec%1000)
 	if ss.Msec%10 == 0 {
-		ss.LogTime(ss.Msec10Log, (msec/10)%1000)
+		ss.LogTime(ss.Log("Msec10Log"+sfx), (msec/10)%1000)
 		if ss.Msec%100 == 0 {
-			ss.LogTime(ss.Msec100Log, (msec / 100))
-			ss.MsecPlot.GoUpdate()
-			ss.Msec10Plot.GoUpdate()
-			ss.Msec100Plot.GoUpdate()
+			ss.LogTime(ss.Log("Msec100Log"+sfx), (msec / 100))
+			ss.UpdateTimePlots()
 		}
 	}
 }
@@ -437,12 +464,23 @@ func (ss *Sim) Stopped() {
 	}
 }
 
-func (ss *Sim) GraphRun(secs float64) {
+func (ss *Sim) GraphRun(secs float64, n int) {
 	nms := int(secs / 0.001)
 	sms := ss.Msec
 	for msec := 0; msec < nms; msec++ {
 		ss.NeuronUpdt(sms+msec, 0, 0)
-		ss.LogDefault()
+		ss.LogDefault(n)
+		if ss.StopNow {
+			break
+		}
+	}
+}
+
+func (ss *Sim) RunQuiet(secs float64) {
+	nms := int(secs / 0.001)
+	sms := ss.Msec
+	for msec := 0; msec < nms; msec++ {
+		ss.NeuronUpdt(sms+msec, 0, 0)
 		if ss.StopNow {
 			break
 		}
@@ -563,14 +601,15 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.SetColParams("PSD_CaMact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Cyt_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_CaMKIIact", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_CaMKIIn2b", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PSD_CaMKIIact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PSD_CaMKIIn2b", eplot.On, eplot.FixMin, 0, eplot.FixMax, 20)
 	if ss.Opts.UseDAPK1 {
-		plt.SetColParams("PSD_DAPK1act", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
+		plt.SetColParams("PSD_DAPK1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 		plt.SetColParams("Cyt_DAPK1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+		plt.SetColParams("PSD_DAPK1n2b", eplot.On, eplot.FixMin, 0, eplot.FixMax, 20)
 	}
-	plt.SetColParams("PSD_PP1act", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_CaNact", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PSD_PP1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PSD_CaNact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Cyt_CaMKIIact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Trp_AMPAR", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
 
@@ -578,12 +617,20 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 }
 
 func (ss *Sim) ResetTimePlots() {
-	ss.MsecLog.SetNumRows(0)
-	ss.MsecPlot.Update()
-	ss.Msec10Log.SetNumRows(0)
-	ss.Msec10Plot.Update()
-	ss.Msec100Log.SetNumRows(0)
-	ss.Msec100Plot.Update()
+	for nm, dt := range ss.Logs {
+		if strings.HasPrefix(nm, "Msec") {
+			dt.SetNumRows(0)
+		}
+	}
+	ss.UpdateTimePlots()
+}
+
+func (ss *Sim) UpdateTimePlots() {
+	for nm, plt := range ss.Plots {
+		if strings.HasPrefix(nm, "Msec") {
+			plt.Update()
+		}
+	}
 }
 
 //////////////////////////////////////////////
@@ -707,10 +754,10 @@ func (ss *Sim) ConfigPhaseDWtPlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Pl
 }
 
 func (ss *Sim) ResetDWtPlot() {
-	ss.DWtLog.SetNumRows(0)
-	ss.DWtPlot.Update()
-	ss.PhaseDWtLog.SetNumRows(0)
-	ss.PhaseDWtPlot.Update()
+	ss.Log("DWtLog").SetNumRows(0)
+	ss.Plot("DWtPlot").Update()
+	ss.Log("PhaseDWtLog").SetNumRows(0)
+	ss.Plot("PhaseDWtPlot").Update()
 }
 
 //////////////////////////////////////////////
@@ -741,7 +788,7 @@ func (ss *Sim) ConfigAutoKPlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2
 
 // AutoK plots AutoK as function of T total
 func (ss *Sim) AutoK() {
-	dt := ss.AutoKLog
+	dt := ss.Log("AutoKLog")
 
 	max := 1.0
 	inc := 0.01
@@ -821,10 +868,9 @@ var GeneColMap = map[string]string{
 	"membrane_potential20": "03 Vdend2",
 }
 
-func (ss *Sim) RenameGenesisLog() {
-	dt := ss.GenesisLog
+func (ss *Sim) RenameGenesisLog(dt *etable.Table) *etable.Table {
 	if dt.ColNames[1] != "Ca.Co12" {
-		return
+		return dt
 	}
 	omap := make(map[string]int)
 	for i, cn := range dt.ColNames {
@@ -853,14 +899,16 @@ func (ss *Sim) RenameGenesisLog() {
 			}
 			dt.SetCellFloat("Time", ri, t-500)
 		}
-		ss.GenesisLog = ix.NewTable()
+		dt = ix.NewTable()
+		ss.Logs["GenesisLog"] = dt
 	}
+	return dt
 }
 
 func (ss *Sim) OpenGenesisData(fname gi.FileName) {
-	ss.GenesisLog.OpenCSV(fname, etable.Tab)
-	ss.RenameGenesisLog()
-	dt := ss.GenesisLog
+	dt := ss.Log("GenesisLog")
+	dt.OpenCSV(fname, etable.Tab)
+	dt = ss.RenameGenesisLog(dt)
 	dt.SetMetaData("name", string(fname))
 	dt.SetMetaData("desc", "Genesis Urakubo model data")
 	dt.SetMetaData("read-only", "true")
@@ -913,25 +961,34 @@ See <a href="https://github.com/emer/axon/blob/master/examples/urakubo/README.md
 	ss.ConfigNetView(nv) // add labels etc
 
 	plt := tv.AddNewTab(eplot.KiT_Plot2D, "DWtPlot").(*eplot.Plot2D)
-	ss.DWtPlot = ss.ConfigDWtPlot(plt, ss.DWtLog)
+	ss.AddPlot("DWtPlot", ss.ConfigDWtPlot(plt, ss.Log("DWtLog")))
 
 	plt = tv.AddNewTab(eplot.KiT_Plot2D, "PhaseDWtPlot").(*eplot.Plot2D)
-	ss.PhaseDWtPlot = ss.ConfigPhaseDWtPlot(plt, ss.PhaseDWtLog)
+	ss.AddPlot("PhaseDWtPlot", ss.ConfigPhaseDWtPlot(plt, ss.Log("PhaseDWtLog")))
 
 	plt = tv.AddNewTab(eplot.KiT_Plot2D, "Msec100Plot").(*eplot.Plot2D)
-	ss.Msec100Plot = ss.ConfigTimePlot(plt, ss.Msec100Log)
+	ss.AddPlot("Msec100Plot", ss.ConfigTimePlot(plt, ss.Log("Msec100Log")))
+
+	plt = tv.AddNewTab(eplot.KiT_Plot2D, "Msec100Plot2").(*eplot.Plot2D)
+	ss.AddPlot("Msec100Plot2", ss.ConfigTimePlot(plt, ss.Log("Msec100Log2")))
 
 	plt = tv.AddNewTab(eplot.KiT_Plot2D, "Msec10Plot").(*eplot.Plot2D)
-	ss.Msec10Plot = ss.ConfigTimePlot(plt, ss.Msec10Log)
+	ss.AddPlot("Msec10Plot", ss.ConfigTimePlot(plt, ss.Log("Msec10Log")))
+
+	plt = tv.AddNewTab(eplot.KiT_Plot2D, "Msec10Plot2").(*eplot.Plot2D)
+	ss.AddPlot("Msec10Plot2", ss.ConfigTimePlot(plt, ss.Log("Msec10Log2")))
 
 	plt = tv.AddNewTab(eplot.KiT_Plot2D, "MsecPlot").(*eplot.Plot2D)
-	ss.MsecPlot = ss.ConfigTimePlot(plt, ss.MsecLog)
+	ss.AddPlot("MsecPlot", ss.ConfigTimePlot(plt, ss.Log("MsecLog")))
+
+	plt = tv.AddNewTab(eplot.KiT_Plot2D, "MsecPlot2").(*eplot.Plot2D)
+	ss.AddPlot("MsecPlot2", ss.ConfigTimePlot(plt, ss.Log("MsecLog2")))
 
 	plt = tv.AddNewTab(eplot.KiT_Plot2D, "AutoKPlot").(*eplot.Plot2D)
-	ss.AutoKPlot = ss.ConfigAutoKPlot(plt, ss.AutoKLog)
+	ss.AddPlot("AutoKPlot", ss.ConfigAutoKPlot(plt, ss.Log("AutoKLog")))
 
 	plt = tv.AddNewTab(eplot.KiT_Plot2D, "GenesisPlot").(*eplot.Plot2D)
-	ss.GenesisPlot = ss.ConfigGenesisPlot(plt, ss.GenesisLog)
+	ss.AddPlot("GenesisPlot", ss.ConfigGenesisPlot(plt, ss.Log("GenesisLog")))
 
 	split.SetSplits(.2, .8)
 

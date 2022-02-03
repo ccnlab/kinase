@@ -85,15 +85,15 @@ func (cs *CaMState) Init() {
 	if TheOpts.InitBaseline {
 		if TheOpts.UseDAPK1 {
 			vol := float64(CytVol)
-			cs.Cyt.CaM[0] = chem.CoToN(80.2, vol)
-			cs.Cyt.CaM[1] = chem.CoToN(1.027, vol)
-			cs.Cyt.CaM[2] = chem.CoToN(0.006837, vol)
-			cs.Cyt.CaM[3] = chem.CoToN(8.372e-06, vol)
+			cs.Cyt.CaM[0] = chem.CoToN(77.64, vol)
+			cs.Cyt.CaM[1] = chem.CoToN(0.9937, vol)
+			cs.Cyt.CaM[2] = chem.CoToN(0.00662, vol)
+			cs.Cyt.CaM[3] = chem.CoToN(1.233e-05, vol)
 			vol = PSDVol
-			cs.PSD.CaM[0] = chem.CoToN(80.2, vol)
-			cs.PSD.CaM[1] = chem.CoToN(1.027, vol)
-			cs.PSD.CaM[2] = chem.CoToN(0.006837, vol)
-			cs.PSD.CaM[3] = chem.CoToN(8.74e-06, vol)
+			cs.PSD.CaM[0] = chem.CoToN(77.64, vol)
+			cs.PSD.CaM[1] = chem.CoToN(0.9938, vol)
+			cs.PSD.CaM[2] = chem.CoToN(0.00662, vol)
+			cs.PSD.CaM[3] = chem.CoToN(1.246e-05, vol)
 		} else {
 
 		}

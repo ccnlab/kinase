@@ -48,6 +48,8 @@ const (
 
 	ThetaErr
 
+	ThetaErrComp
+
 	ThetaErrSweep
 
 	ThetaErrAllSweep
@@ -69,6 +71,7 @@ var StimFuncs = map[Stims]func(){
 	PoissonDurSweep:  PoissonDurSweepFun,
 	OpPhaseDurSweep:  OpPhaseDurSweepFun,
 	ThetaErr:         ThetaErrFun,
+	ThetaErrComp:     ThetaErrCompFun,
 	ThetaErrSweep:    ThetaErrSweepFun,
 	ThetaErrAllSweep: ThetaErrAllSweepFun,
 }
@@ -198,7 +201,7 @@ func BaselineFun() {
 	ss := &TheSim
 	for msec := 0; msec < 500000; msec++ { // 500000 = 500 sec for full baseline
 		ss.NeuronUpdt(msec, 0, 0)
-		ss.LogDefault()
+		ss.LogDefault(0)
 		if ss.StopNow {
 			break
 		}
@@ -212,7 +215,7 @@ func CaTargFun() {
 	ss.Spine.Ca.SetBuffTarg(ss.CaTarg.Cyt, ss.CaTarg.PSD)
 	for msec := 0; msec < 20000; msec++ {
 		ss.NeuronUpdt(msec, 0, 0)
-		ss.LogDefault()
+		ss.LogDefault(0)
 		if ss.StopNow {
 			break
 		}
@@ -234,12 +237,12 @@ func ClampCa1Fun() {
 		cca := bca + ((ca - bca) / 3)
 		ss.Spine.Ca.SetClamp(cca, ca)
 		ss.NeuronUpdt(msec, 0, 0)
-		ss.LogDefault()
+		ss.LogDefault(0)
 		if ss.StopNow {
 			break
 		}
 	}
-	ss.GraphRun(ss.FinalSecs)
+	ss.GraphRun(ss.FinalSecs, 0)
 	ss.Stopped()
 }
 
@@ -262,12 +265,12 @@ func STDPFun() {
 			ge = ss.GeStim
 		}
 		ss.NeuronUpdt(msec, ge, 0)
-		ss.LogDefault()
+		ss.LogDefault(0)
 		if ss.StopNow {
 			break
 		}
 	}
-	ss.GraphRun(ss.FinalSecs)
+	ss.GraphRun(ss.FinalSecs, 0)
 	ss.Stopped()
 }
 
@@ -296,15 +299,15 @@ func STDPSweepFun() {
 				ge = ss.GeStim
 			}
 			ss.NeuronUpdt(msec, ge, 0)
-			ss.LogDefault()
+			ss.LogDefault(0)
 			if ss.StopNow {
 				ss.Stopped()
 				return
 			}
 		}
-		ss.GraphRun(ss.FinalSecs)
-		ss.LogDWt(ss.DWtLog, float64(dt), 0)
-		ss.DWtPlot.GoUpdate()
+		ss.GraphRun(ss.FinalSecs, 0)
+		ss.LogDWt(ss.Log("DWtLog"), float64(dt), 0)
+		ss.Plot("DWtPlot").GoUpdate()
 	}
 
 	ss.Stopped()
@@ -341,16 +344,16 @@ func STDPPacketSweepFun() {
 					ge = ss.GeStim
 				}
 				ss.NeuronUpdt(msec, ge, 0)
-				ss.LogDefault()
+				ss.LogDefault(0)
 				if ss.StopNow {
 					ss.Stopped()
 					return
 				}
 			}
 		}
-		ss.GraphRun(ss.FinalSecs)
-		ss.LogDWt(ss.DWtLog, float64(dt), float64(ss.SendHz))
-		ss.DWtPlot.GoUpdate()
+		ss.GraphRun(ss.FinalSecs, 0)
+		ss.LogDWt(ss.Log("DWtLog"), float64(dt), float64(ss.SendHz))
+		ss.Plot("DWtPlot").GoUpdate()
 	}
 
 	ss.Stopped()
@@ -384,16 +387,16 @@ func PoissonFun() {
 			}
 
 			ss.NeuronUpdt(tmsec, ge, 0)
-			ss.LogDefault()
+			ss.LogDefault(0)
 			if ss.StopNow {
 				break
 			}
 			tmsec++
 		}
 		ss.Spine.States.PreSpike = 0
-		ss.GraphRun(ss.ISISec)
+		ss.GraphRun(ss.ISISec, 0)
 	}
-	ss.GraphRun(ss.FinalSecs)
+	ss.GraphRun(ss.FinalSecs, 0)
 	ss.Stopped()
 }
 
@@ -415,15 +418,15 @@ func SPoissonRGClampFun() {
 			}
 
 			ss.NeuronUpdt(msec, ss.GeStim, 0)
-			ss.LogDefault()
+			ss.LogDefault(0)
 			if ss.StopNow {
 				break
 			}
 		}
 		ss.Spine.States.PreSpike = 0
-		ss.GraphRun(ss.ISISec)
+		ss.GraphRun(ss.ISISec, 0)
 	}
-	ss.GraphRun(ss.FinalSecs)
+	ss.GraphRun(ss.FinalSecs, 0)
 	ss.Stopped()
 }
 
@@ -460,18 +463,18 @@ func PoissonHzSweepFun() {
 					}
 
 					ss.NeuronUpdt(msec, ge, 0)
-					ss.LogDefault()
+					ss.LogDefault(0)
 					if ss.StopNow {
 						ss.Stopped()
 						return
 					}
 				}
 				ss.Spine.States.PreSpike = 0
-				ss.GraphRun(ss.ISISec)
+				ss.GraphRun(ss.ISISec, 0)
 			}
-			ss.GraphRun(ss.FinalSecs)
-			ss.LogDWt(ss.DWtLog, float64(rhz), float64(shz))
-			ss.DWtPlot.GoUpdate()
+			ss.GraphRun(ss.FinalSecs, 0)
+			ss.LogDWt(ss.Log("DWtLog"), float64(rhz), float64(shz))
+			ss.Plot("DWtPlot").GoUpdate()
 		}
 	}
 	ss.Stopped()
@@ -510,18 +513,18 @@ func PoissonDurSweepFun() {
 					}
 
 					ss.NeuronUpdt(msec, ge, 0)
-					ss.LogDefault()
+					ss.LogDefault(0)
 					if ss.StopNow {
 						ss.Stopped()
 						return
 					}
 				}
 				ss.Spine.States.PreSpike = 0
-				ss.GraphRun(ss.ISISec)
+				ss.GraphRun(ss.ISISec, 0)
 			}
-			ss.GraphRun(ss.FinalSecs)
-			ss.LogDWt(ss.DWtLog, float64(rhz), float64(dur))
-			ss.DWtPlot.GoUpdate()
+			ss.GraphRun(ss.FinalSecs, 0)
+			ss.LogDWt(ss.Log("DWtLog"), float64(rhz), float64(dur))
+			ss.Plot("DWtPlot").GoUpdate()
 		}
 	}
 	ss.Stopped()
@@ -561,18 +564,18 @@ func OpPhaseDurSweepFun() {
 					}
 
 					ss.NeuronUpdt(msec, ge, 0)
-					ss.LogDefault()
+					ss.LogDefault(0)
 					if ss.StopNow {
 						ss.Stopped()
 						return
 					}
 				}
 				ss.Spine.States.PreSpike = 0
-				ss.GraphRun(ss.ISISec)
+				ss.GraphRun(ss.ISISec, 0)
 			}
-			ss.GraphRun(ss.FinalSecs)
-			ss.LogDWt(ss.DWtLog, float64(rhz), float64(dur))
-			ss.DWtPlot.GoUpdate()
+			ss.GraphRun(ss.FinalSecs, 0)
+			ss.LogDWt(ss.Log("DWtLog"), float64(rhz), float64(dur))
+			ss.Plot("DWtPlot").GoUpdate()
 		}
 	}
 	ss.Stopped()
@@ -580,8 +583,6 @@ func OpPhaseDurSweepFun() {
 
 func ThetaErrFun() {
 	ss := &TheSim
-
-	ss.ResetDWtPlot()
 
 	phsdur := []int{ss.DurMsec / 2, ss.DurMsec / 2}
 	nphs := len(phsdur)
@@ -593,6 +594,7 @@ func ThetaErrFun() {
 	tmsec := 0
 	ss.ResetTimePlots()
 	ss.Init()
+	ss.RunQuiet(10)
 	for ri := 0; ri < ss.NReps; ri++ {
 		Sp := float32(1)
 		Rp := float32(1)
@@ -622,7 +624,7 @@ func ThetaErrFun() {
 				}
 
 				ss.NeuronUpdt(tmsec, ge, 0)
-				ss.LogDefault()
+				ss.LogDefault(0)
 				if ss.StopNow {
 					ss.Stopped()
 					return
@@ -631,11 +633,81 @@ func ThetaErrFun() {
 			}
 		}
 		ss.Spine.States.PreSpike = 0
-		ss.GraphRun(ss.ISISec)
+		ss.GraphRun(ss.ISISec, 0)
 		tmsec = ss.Msec
 	}
-	ss.GraphRun(ss.FinalSecs)
+	ss.GraphRun(ss.FinalSecs, 0)
 	tmsec = ss.Msec
+	ss.Stopped()
+}
+
+func ThetaErrCompFun() {
+	ss := &TheSim
+
+	ss.ResetTimePlots()
+	for itr := 0; itr < 2; itr++ {
+		phsdur := []int{ss.DurMsec / 2, ss.DurMsec / 2}
+		nphs := len(phsdur)
+
+		// using send, recv for minus, plus
+		sphz := []int{int(ss.SendHz), int(ss.RecvHz)}
+		rphz := []int{int(ss.SendHz), int(ss.RecvHz)}
+
+		if itr == 1 {
+			sphz[1] = int(ss.SendHz)
+			rphz[1] = int(ss.SendHz)
+		}
+
+		tmsec := 0
+		ss.Init()
+		ss.RunQuiet(10)
+
+		for ri := 0; ri < ss.NReps; ri++ {
+			Sp := float32(1)
+			Rp := float32(1)
+			for pi := 0; pi < nphs; pi++ {
+				dur := phsdur[pi]
+				shz := sphz[pi]
+				rhz := rphz[pi]
+				Sint := mat32.Exp(-1000.0 / float32(shz))
+				Rint := mat32.Exp(-1000.0 / float32(rhz))
+				for msec := 0; msec < dur; msec++ {
+					Sp *= rand.Float32()
+					if Sp <= Sint {
+						ss.Spine.States.PreSpike = 1
+						Sp = 1
+					} else {
+						ss.Spine.States.PreSpike = 0
+					}
+
+					ge := float32(0.0)
+					Rp *= rand.Float32()
+					if Rp <= Rint {
+						ge = ss.GeStim
+						Rp = 1
+					}
+					if ss.RGClamp {
+						ge = RGeStimForHz(float32(rhz))
+					}
+
+					ss.NeuronUpdt(tmsec, ge, 0)
+					ss.LogDefault(itr)
+					if ss.StopNow {
+						ss.Stopped()
+						return
+					}
+					tmsec++
+				}
+			}
+			ss.Spine.States.PreSpike = 0
+			ss.GraphRun(ss.ISISec, itr)
+			tmsec = ss.Msec
+		}
+		ss.GraphRun(ss.FinalSecs, itr)
+		tmsec = ss.Msec
+		ss.LogDWt(ss.Log("DWtLog"), float64(itr), 0)
+		ss.Plot("DWtPlot").GoUpdate()
+	}
 	ss.Stopped()
 }
 
@@ -692,7 +764,7 @@ func ThetaErrSweepFun() {
 						}
 
 						ss.NeuronUpdt(tmsec, ge, 0)
-						ss.LogDefault()
+						ss.LogDefault(0)
 						if ss.StopNow {
 							ss.Stopped()
 							return
@@ -701,13 +773,13 @@ func ThetaErrSweepFun() {
 					}
 				}
 				ss.Spine.States.PreSpike = 0
-				ss.GraphRun(ss.ISISec)
+				ss.GraphRun(ss.ISISec, 0)
 				tmsec = ss.Msec
 			}
-			ss.GraphRun(ss.FinalSecs)
+			ss.GraphRun(ss.FinalSecs, 0)
 			tmsec = ss.Msec
-			ss.LogPhaseDWt(ss.PhaseDWtLog, sphz, rphz)
-			ss.PhaseDWtPlot.GoUpdate()
+			ss.LogPhaseDWt(ss.Log("PhaseDWtLog"), sphz, rphz)
+			ss.Plot("PhaseDWtPlot").GoUpdate()
 		}
 	}
 	ss.Stopped()
@@ -767,7 +839,7 @@ func ThetaErrAllSweepFun() {
 								}
 
 								ss.NeuronUpdt(msec, ge, 0)
-								ss.LogDefault()
+								ss.LogDefault(0)
 								if ss.StopNow {
 									ss.Stopped()
 									return
@@ -775,11 +847,11 @@ func ThetaErrAllSweepFun() {
 							}
 						}
 						ss.Spine.States.PreSpike = 0
-						ss.GraphRun(ss.ISISec)
+						ss.GraphRun(ss.ISISec, 0)
 					}
-					ss.GraphRun(ss.FinalSecs)
-					ss.LogPhaseDWt(ss.PhaseDWtLog, sphz, rphz)
-					ss.PhaseDWtPlot.GoUpdate()
+					ss.GraphRun(ss.FinalSecs, 0)
+					ss.LogPhaseDWt(ss.Log("PhaseDWtLog"), sphz, rphz)
+					ss.Plot("PhaseDWtPlot").GoUpdate()
 				}
 			}
 		}
