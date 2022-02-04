@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 /*
-urakubo: This simulation replicates the Urakubo et al, 2008 detailed model of spike-driven
+kinase: This simulation replicates the Kinase et al, 2008 detailed model of spike-driven
 learning, including intracellular Ca-driven signaling, involving CaMKII, CaN, PKA, PP1.
 */
 package main
@@ -11,7 +11,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -46,8 +45,8 @@ const LogPrec = 6
 // SimOpts has high-level simulation options that are accessed in the code
 type SimOpts struct {
 	InitBaseline bool `def:"true" desc:"use 500 sec pre-compiled baseline for initialization"`
-	UseN2B       bool `def:"true" desc:"use the GluN2B binding for CaMKII dynamics -- explicitly breaks out this binding and its consequences for localizing CaMKII in the PSD, but without UseDAPK1, it should replicate original Urakubo dynamics, as it does not include any competition there."`
-	UseDAPK1     bool `desc:"use the DAPK1 competitive GluN2B binding (departs from standard Urakubo -- otherwise the same."`
+	UseN2B       bool `def:"true" desc:"use the GluN2B binding for CaMKII dynamics -- explicitly breaks out this binding and its consequences for localizing CaMKII in the PSD, but without UseDAPK1, it should replicate original Kinase dynamics, as it does not include any competition there."`
+	UseDAPK1     bool `desc:"use the DAPK1 competitive GluN2B binding (departs from standard Kinase -- otherwise the same."`
 }
 
 // TheOpts are the global sim options
@@ -114,7 +113,7 @@ func (nex *NeuronEx) Init() {
 // for the fields which provide hints to how things should be displayed).
 type Sim struct {
 	Net         *axon.Network            `view:"no-inline" desc:"the network -- click to view / edit parameters for layers, prjns, etc"`
-	Spine       Spine                    `desc:"the spine state with Urakubo intracellular model"`
+	Spine       Spine                    `desc:"the spine state with Kinase intracellular model"`
 	Neuron      *axon.Neuron             `view:"no-inline" desc:"the neuron"`
 	NeuronEx    NeuronEx                 `view:"no-inline" desc:"extra neuron state for additional channels: VGCC, AK"`
 	Params      params.Sets              `view:"no-inline" desc:"full collection of param sets"`
@@ -137,7 +136,7 @@ type Sim struct {
 	DAPK1lrate  float64                  `desc:"multiplier for diff between DAPK1 and CaMKII"`
 	CaNDAPK1    float64                  `desc:"Km for the CaM dephosphorylation of DAPK1"`
 	VmDend      bool                     `desc:"use dendritic Vm signal for driving spine channels"`
-	NMDAAxon    bool                     `desc:"use the Axon NMDA channel instead of the allosteric Urakubo one"`
+	NMDAAxon    bool                     `desc:"use the Axon NMDA channel instead of the allosteric Kinase one"`
 	NMDAGbar    float32                  `def:"0,0.15" desc:"strength of NMDA current -- 0.15 default for posterior cortex"`
 	GABABGbar   float32                  `def:"0,0.2" desc:"strength of GABAB current -- 0.2 default for posterior cortex"`
 	VGCC        chans.VGCCParams         `desc:"VGCC parameters: set Gbar > 0 to include"`
@@ -244,8 +243,6 @@ func (ss *Sim) Config() {
 	ss.ConfigTimeLog(ss.Log("Msec10Log2"))
 	ss.ConfigTimeLog(ss.Log("Msec100Log2"))
 	ss.ConfigAutoKLog(ss.Log("AutoKLog"))
-
-	ss.Log("GenesisLog")
 }
 
 func (ss *Sim) ConfigNet(net *axon.Network) {
@@ -518,7 +515,7 @@ func (ss *Sim) LogTime(dt *etable.Table, row int) {
 }
 
 func (ss *Sim) ConfigTimeLog(dt *etable.Table) {
-	dt.SetMetaData("name", "Urakubo Time Log")
+	dt.SetMetaData("name", "Kinase Time Log")
 	dt.SetMetaData("desc", "Record of neuron / spine data over time")
 	dt.SetMetaData("read-only", "true")
 	dt.SetMetaData("precision", strconv.Itoa(LogPrec))
@@ -554,7 +551,7 @@ func (ss *Sim) ConfigTimeLog(dt *etable.Table) {
 }
 
 func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D {
-	plt.Params.Title = "Urakubo Time Plot"
+	plt.Params.Title = "Kinase Time Plot"
 	plt.Params.XAxisCol = "Time"
 	plt.SetTable(dt)
 	// order of params: on, fixMin, min, fixMax, max
@@ -593,19 +590,23 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.SetColParams("PSD_Ca", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_CaMact", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
 
+	plt.SetColParams("Ds", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("Ps", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("Wt", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+
 	plt.SetColParams("Cyt_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_CaMKIIact", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_CaMKIIn2b", eplot.On, eplot.FixMin, 0, eplot.FixMax, 10)
+	plt.SetColParams("PSD_CaMKIIact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PSD_CaMKIIn2b", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 10)
 	if ss.Opts.UseDAPK1 {
-		plt.SetColParams("PSD_DAPK1act", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
+		plt.SetColParams("PSD_DAPK1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 		plt.SetColParams("Cyt_DAPK1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-		plt.SetColParams("PSD_DAPK1n2b", eplot.On, eplot.FixMin, 0, eplot.FixMax, 10)
+		plt.SetColParams("PSD_DAPK1n2b", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 10)
 	}
 	plt.SetColParams("PSD_PP1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_CaNact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Cyt_CaMKIIact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("Trp_AMPAR", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("Trp_AMPAR", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 
 	return plt
 }
@@ -649,7 +650,7 @@ func (ss *Sim) LogDWt(dt *etable.Table, x, y float64) {
 }
 
 func (ss *Sim) ConfigDWtLog(dt *etable.Table) {
-	dt.SetMetaData("name", "Urakubo DWt Log")
+	dt.SetMetaData("name", "Kinase DWt Log")
 	dt.SetMetaData("desc", "Record of final proportion dWt change")
 	dt.SetMetaData("read-only", "true")
 	dt.SetMetaData("precision", strconv.Itoa(LogPrec))
@@ -666,7 +667,7 @@ func (ss *Sim) ConfigDWtLog(dt *etable.Table) {
 }
 
 func (ss *Sim) ConfigDWtPlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D {
-	plt.Params.Title = "Urakubo DWt Plot"
+	plt.Params.Title = "Kinase DWt Plot"
 	plt.Params.XAxisCol = "X"
 	plt.Params.LegendCol = "Y"
 	plt.SetTable(dt)
@@ -708,7 +709,7 @@ func (ss *Sim) LogPhaseDWt(dt *etable.Table, sphz, rphz []int) {
 }
 
 func (ss *Sim) ConfigPhaseDWtLog(dt *etable.Table) {
-	dt.SetMetaData("name", "Urakubo Phase DWt Log")
+	dt.SetMetaData("name", "Kinase Phase DWt Log")
 	dt.SetMetaData("desc", "Record of final proportion dWt change")
 	dt.SetMetaData("read-only", "true")
 	dt.SetMetaData("precision", strconv.Itoa(LogPrec))
@@ -729,7 +730,7 @@ func (ss *Sim) ConfigPhaseDWtLog(dt *etable.Table) {
 }
 
 func (ss *Sim) ConfigPhaseDWtPlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D {
-	plt.Params.Title = "Urakubo Phase DWt Plot"
+	plt.Params.Title = "Kinase Phase DWt Plot"
 	plt.Params.XAxisCol = "CHL"
 	plt.Params.LegendCol = "Cond"
 	plt.Params.Scale = 3
@@ -758,7 +759,7 @@ func (ss *Sim) ResetDWtPlot() {
 //  AutoK Log
 
 func (ss *Sim) ConfigAutoKLog(dt *etable.Table) {
-	dt.SetMetaData("name", "Urakubo AutoK Plot")
+	dt.SetMetaData("name", "Kinase AutoK Plot")
 	dt.SetMetaData("desc", "autoK as function of diff variables")
 	dt.SetMetaData("read-only", "true")
 	dt.SetMetaData("precision", strconv.Itoa(LogPrec))
@@ -772,7 +773,7 @@ func (ss *Sim) ConfigAutoKLog(dt *etable.Table) {
 }
 
 func (ss *Sim) ConfigAutoKPlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D {
-	plt.Params.Title = "Urakubo AutoK Plot"
+	plt.Params.Title = "Kinase AutoK Plot"
 	plt.Params.XAxisCol = "Total"
 	plt.SetTable(dt)
 	// order of params: on, fixMin, min, fixMax, max
@@ -817,100 +818,6 @@ func (ss *Sim) AutoK() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
-// 		Genesis Plots
-
-func (ss *Sim) ConfigGenesisPlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D {
-	plt.Params.Title = "Urakubo Genesis Data Plot"
-	plt.Params.XAxisCol = "Time"
-	plt.SetTable(dt)
-	return plt
-}
-
-var GeneColMap = map[string]string{
-	"Time":                 "00_Time",
-	"Ca.Co12":              "08 PSD_Ca",
-	"Ca.Co6":               "07 Cyt_Ca",
-	"CaM-AC1.Co10":         "31 PSD_AC1act",
-	"CaM-AC1.Co4":          "26 Cyt_AC1act",
-	"CaMCa3.Co15":          "22 PSD_Ca3CaM",
-	"I1_active.Co14":       "36 PSD_I1P",
-	"Internal_AMPAR.Co16":  "40 Int_AMPAR",
-	"Jca27":                "13 NMDA_Jca",
-	"Jca31":                "17 PSD_VGCC_Jca",
-	"Jca32":                "18 Cyt_VGCC_Jca",
-	"Ji29":                 "17 NMDA_Ji",
-	"Memb_AMPAR.Co17":      "41 Mbr_AMPAR",
-	"Mg30":                 "11 NMDA_Mg",
-	"Nopen26":              "12 NMDA_Nopen",
-	"Nt023":                "14 NMDA_Nt0",
-	"Nt124":                "15 NMDA_Nt1",
-	"Nt225":                "16 NMDA_Nt2",
-	"PP1_active.Co1":       "35 Cyt_PP1act",
-	"PP1_active.Co7":       "37 PSD_PP1act",
-	"PSD_AMPAR.Co18":       "42 PSD_AMPAR",
-	"Trapped_AMPAR.Co19":   "43 Trp_AMPAR",
-	"Vca28":                "16 NMDA_Vca",
-	"Vm21":                 "01 Vsoma",
-	"Vm22":                 "02 Vdend",
-	"activeCaMKII.Co11":    "23 PSD_CaMKIIact",
-	"activeCaMKII.Co5":     "21 Cyt_CaMKIIact",
-	"activeCaN.Co3":        "24 Cyt_CaNact",
-	"activeCaN.Co9":        "25 PSD_CaNact",
-	"activePKA.Co2":        "30 Cyt_PKAact",
-	"activePKA.Co8":        "33 PSD_PKAact",
-	"cAMP.Co13":            "32 PSD_cAMP",
-	"membrane_potential20": "03 Vdend2",
-}
-
-func (ss *Sim) RenameGenesisLog(dt *etable.Table) *etable.Table {
-	if dt.ColNames[1] != "Ca.Co12" {
-		return dt
-	}
-	omap := make(map[string]int)
-	for i, cn := range dt.ColNames {
-		if nn, ok := GeneColMap[cn]; ok {
-			dt.ColNames[i] = nn
-		}
-		omap[dt.ColNames[i]] = i
-	}
-	sort.Strings(dt.ColNames)
-	nc := make([]etensor.Tensor, len(dt.ColNames))
-	for i, cn := range dt.ColNames {
-		oi := omap[cn]
-		nc[i] = dt.Cols[oi]
-		dt.ColNames[i] = cn[3:]
-	}
-	dt.Cols = nc
-	dt.UpdateColNameMap()
-
-	if TheOpts.InitBaseline {
-		ix := etable.IdxView{}
-		ix.Table = dt
-		for ri := 0; ri < dt.Rows; ri++ {
-			t := dt.CellFloat("Time", ri)
-			if t > 500 {
-				ix.Idxs = append(ix.Idxs, ri)
-			}
-			dt.SetCellFloat("Time", ri, t-500)
-		}
-		dt = ix.NewTable()
-		ss.Logs["GenesisLog"] = dt
-	}
-	return dt
-}
-
-func (ss *Sim) OpenGenesisData(fname gi.FileName) {
-	dt := ss.Log("GenesisLog")
-	dt.OpenCSV(fname, etable.Tab)
-	dt = ss.RenameGenesisLog(dt)
-	dt.SetMetaData("name", string(fname))
-	dt.SetMetaData("desc", "Genesis Urakubo model data")
-	dt.SetMetaData("read-only", "true")
-	dt.SetMetaData("precision", strconv.Itoa(LogPrec))
-	ss.Plots["GenesisPlot"].SetTable(dt)
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////
 // 		Gui
 
 func (ss *Sim) ConfigNetView(nv *netview.NetView) {
@@ -922,11 +829,11 @@ func (ss *Sim) ConfigGui() *gi.Window {
 	width := 1600
 	height := 1200
 
-	gi.SetAppName("urakubo")
-	gi.SetAppAbout(`This simulation replicates the Urakubo et al, 2008 biophysical model of LTP / LTD.
-See <a href="https://github.com/emer/axon/blob/master/examples/urakubo/README.md">README.md on GitHub</a>.</p>`)
+	gi.SetAppName("kinase")
+	gi.SetAppAbout(`This simulation replicates the Kinase et al, 2008 biophysical model of LTP / LTD.
+See <a href="https://github.com/emer/axon/blob/master/examples/kinase/README.md">README.md on GitHub</a>.</p>`)
 
-	win := gi.NewMainWindow("urakubo", "Urakubo", width, height)
+	win := gi.NewMainWindow("kinase", "Kinase", width, height)
 	ss.Win = win
 
 	vp := win.WinViewport2D()
@@ -981,9 +888,6 @@ See <a href="https://github.com/emer/axon/blob/master/examples/urakubo/README.md
 	plt = tv.AddNewTab(eplot.KiT_Plot2D, "AutoKPlot").(*eplot.Plot2D)
 	ss.AddPlot("AutoKPlot", ss.ConfigAutoKPlot(plt, ss.Log("AutoKLog")))
 
-	plt = tv.AddNewTab(eplot.KiT_Plot2D, "GenesisPlot").(*eplot.Plot2D)
-	ss.AddPlot("GenesisPlot", ss.ConfigGenesisPlot(plt, ss.Log("GenesisLog")))
-
 	split.SetSplits(.2, .8)
 
 	tbar.AddAction(gi.ActOpts{Label: "Init", Icon: "update", Tooltip: "Initialize everything including network weights, and start over.  Also applies current params.", UpdateFunc: func(act *gi.Action) {
@@ -1035,12 +939,6 @@ See <a href="https://github.com/emer/axon/blob/master/examples/urakubo/README.md
 		}
 	})
 
-	tbar.AddAction(gi.ActOpts{Label: "Genesis Plot", Icon: "file-open", Tooltip: "Open Genesis Urakubo model data from geneplot directory.", UpdateFunc: func(act *gi.Action) {
-		act.SetActiveStateUpdt(!ss.IsRunning)
-	}}, win.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-		giv.CallMethod(ss, "OpenGenesisData", vp)
-	})
-
 	tbar.AddAction(gi.ActOpts{Label: "Defaults", Icon: "update", Tooltip: "Restore initial default parameters.", UpdateFunc: func(act *gi.Action) {
 		act.SetActiveStateUpdt(!ss.IsRunning)
 	}}, win.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
@@ -1051,7 +949,7 @@ See <a href="https://github.com/emer/axon/blob/master/examples/urakubo/README.md
 
 	tbar.AddAction(gi.ActOpts{Label: "README", Icon: "file-markdown", Tooltip: "Opens your browser on the README file that contains instructions for how to run this model."}, win.This(),
 		func(recv, send ki.Ki, sig int64, data interface{}) {
-			gi.OpenURL("https://github.com/emer/axon/blob/master/examples/urakubo/README.md")
+			gi.OpenURL("https://github.com/emer/axon/blob/master/examples/kinase/README.md")
 		})
 
 	vp.UpdateEndNoSig(updt)
@@ -1117,17 +1015,17 @@ See <a href="https://github.com/emer/axon/blob/master/examples/urakubo/README.md
 
 // These props register Save methods so they can be used
 var SimProps = ki.Props{
-	"CallMethods": ki.PropSlice{
-		{"OpenGenesisData", ki.Props{
-			"desc": "Load data from Genesis version of Urakubo model, from geneplot directory",
-			"icon": "file-open",
-			"Args": ki.PropSlice{
-				{"File Name", ki.Props{
-					"ext": ".tsv",
-				}},
-			},
-		}},
-	},
+	// "CallMethods": ki.PropSlice{
+	// 	{"OpenGenesisData", ki.Props{
+	// 		"desc": "Load data from Genesis version of Kinase model, from geneplot directory",
+	// 		"icon": "file-open",
+	// 		"Args": ki.PropSlice{
+	// 			{"File Name", ki.Props{
+	// 				"ext": ".tsv",
+	// 			}},
+	// 		},
+	// 	}},
+	// },
 }
 
 func mainrun() {

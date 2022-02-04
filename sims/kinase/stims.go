@@ -697,6 +697,9 @@ func ThetaErrCompFun() {
 						return
 					}
 					tmsec++
+					if pi == 1 && (dur-msec) == 50 {
+						ss.Spine.Kinase.DWt(&ss.Spine.States.Kinase)
+					}
 				}
 			}
 			ss.Spine.States.PreSpike = 0

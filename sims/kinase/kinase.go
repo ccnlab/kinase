@@ -68,21 +68,32 @@ func (kr *KinaseRates) Step(s, cam float64) float64 {
 
 // KinaseParams for abstract Kinase learning rule
 type KinaseParams struct {
-	Drate KinaseRates `desc:"rates for Ds state for LTD / DAPK1"`
-	Prate KinaseRates `desc:"rates for Ps state for LTP / CaMKII"`
-	Lrate float64     `desc:"learning rate"`
+	CaM      bool        `desc:"use CaMact for driving updates -- else raw Ca"`
+	CaMDrate KinaseRates `desc:"rates for Ds state for LTD / DAPK1 -- CaM version"`
+	CaMPrate KinaseRates `desc:"rates for Ps state for LTP / CaMKII -- CaM version"`
+	CaDrate  KinaseRates `desc:"rates for Ds state for LTD / DAPK1 -- Ca versions"`
+	CaPrate  KinaseRates `desc:"rates for Ps state for LTP / CaMKII -- Ca versions"`
+	Lrate    float64     `desc:"learning rate"`
 }
 
 func (kp *KinaseParams) Defaults() {
-	kp.Drate.Set(1, 1) // CaM: 5, 5
-	kp.Prate.Set(2, 3) // CaM: 8, 10
+	kp.CaM = true
+	kp.CaMDrate.Set(5, 0.4)    // CaM matching CaMKII = 5, 5
+	kp.CaMPrate.Set(5.5, 0.45) // CaM matching CaMKII = 8, 10
+	kp.CaDrate.Set(0.55, 0.35) // Ca matching CaMKII = 0.55, 0.35
+	kp.CaPrate.Set(0.6, 0.4)   // Ca matching CaMKII = 0.6, 0.4
 	kp.Lrate = 0.2
 }
 
 // Step computes deltas based on cam input
 func (kp *KinaseParams) Step(c, d *KinaseState, cam, ca float64) {
-	d.Ds = kp.Drate.Step(c.Ds, ca)
-	d.Ps = kp.Prate.Step(c.Ps, ca)
+	if kp.CaM {
+		d.Ds = kp.CaMDrate.Step(c.Ds, cam)
+		d.Ps = kp.CaMPrate.Step(c.Ps, cam)
+	} else {
+		d.Ds = kp.CaDrate.Step(c.Ds, ca)
+		d.Ps = kp.CaPrate.Step(c.Ps, ca)
+	}
 }
 
 // DWt computes weight change given values at this point
