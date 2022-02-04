@@ -571,7 +571,7 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.SetColParams("Inet", eplot.Off, eplot.FixMin, -.2, eplot.FixMax, 1)
 	plt.SetColParams("Vm", eplot.On, eplot.FixMin, 0, eplot.FixMax, 1)
 	plt.SetColParams("Act", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 1)
-	plt.SetColParams("Spike", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 1)
+	plt.SetColParams("Spike", eplot.On, eplot.FixMin, 0, eplot.FixMax, 1)
 	plt.SetColParams("Gk", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 1)
 	plt.SetColParams("ISI", eplot.Off, eplot.FixMin, -2, eplot.FloatMax, 1)
 	plt.SetColParams("AvgISI", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
@@ -596,22 +596,27 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	}
 
 	plt.SetColParams("VmS", eplot.Off, eplot.FixMin, -70, eplot.FloatMax, 1)
-	plt.SetColParams("PreSpike", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PreSpike", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_Ca", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_CaMact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PSD_CaMact", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
+
+	plt.SetColParams("Ds", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("Ps", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("Wt", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+
 	plt.SetColParams("Cyt_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_CaMKIIact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_CaMKIIn2b", eplot.On, eplot.FixMin, 0, eplot.FixMax, 20)
+	plt.SetColParams("PSD_CaMKIIn2b", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 10)
 	if ss.Opts.UseDAPK1 {
 		plt.SetColParams("PSD_DAPK1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 		plt.SetColParams("Cyt_DAPK1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-		plt.SetColParams("PSD_DAPK1n2b", eplot.On, eplot.FixMin, 0, eplot.FixMax, 20)
+		plt.SetColParams("PSD_DAPK1n2b", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 10)
 	}
 	plt.SetColParams("PSD_PP1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_CaNact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Cyt_CaMKIIact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("Trp_AMPAR", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("Trp_AMPAR", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 
 	return plt
 }

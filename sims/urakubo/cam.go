@@ -37,6 +37,10 @@ func (cs *CaMVars) Init(vol float64) {
 	}
 }
 
+func (cs *CaMVars) Active() float64 {
+	return cs.CaM[3]
+}
+
 // Generate Code for Initializing
 func (cs *CaMVars) InitCode(vol float64, pre string) {
 	for i := range cs.CaM {
@@ -58,7 +62,7 @@ func (cs *CaMVars) Integrate(d *CaMVars) {
 
 func (cs *CaMVars) Log(dt *etable.Table, vol float64, row int, pre string) {
 	// dt.SetCellFloat(pre+"CaM", row, chem.CoFmN(cs.CaM[0], vol))
-	dt.SetCellFloat(pre+"CaMact", row, chem.CoFmN(cs.CaM[3], vol))
+	dt.SetCellFloat(pre+"CaMact", row, chem.CoFmN(cs.Active(), vol))
 	// dt.SetCellFloat(pre+"CaCaM", row, chem.CoFmN(cs.Ca[1], vol))
 	// dt.SetCellFloat(pre+"Ca2CaM", row, chem.CoFmN(cs.Ca[2], vol))
 }

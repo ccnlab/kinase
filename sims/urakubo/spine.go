@@ -110,17 +110,19 @@ func (cs *CaSigState) ConfigLog(sch *etable.Schema) {
 // SpineState is entire state of spine including Ca signaling and AMPAR
 // Total state vars: 95 + 20 = 115
 type SpineState struct {
-	Time      float64    `desc:"internal time counter, in seconds, incremented by Dt"`
-	NMDAR     NMDARState `desc:"NMDA receptor state"`
-	CaSig     CaSigState `desc:"calcium signaling systems"`
-	AMPAR     AMPARState `desc:"AMPA receptor state"`
-	VmS       float64    `desc:"Vm in spine"`
-	PreSpike  float64    `desc:"discrete spike firing -- 0 = no spike, 1 = spike"`
-	PreSpikeT float64    `desc:"time of last spike firing -- needed to prevent repeated spiking from same singal"`
+	Time      float64     `desc:"internal time counter, in seconds, incremented by Dt"`
+	Kinase    KinaseState `desc:"abstract Kinase learning rule state"`
+	NMDAR     NMDARState  `desc:"NMDA receptor state"`
+	CaSig     CaSigState  `desc:"calcium signaling systems"`
+	AMPAR     AMPARState  `desc:"AMPA receptor state"`
+	VmS       float64     `desc:"Vm in spine"`
+	PreSpike  float64     `desc:"discrete spike firing -- 0 = no spike, 1 = spike"`
+	PreSpikeT float64     `desc:"time of last spike firing -- needed to prevent repeated spiking from same singal"`
 }
 
 func (ss *SpineState) Init() {
 	ss.Time = 0
+	ss.Kinase.Init()
 	ss.NMDAR.Init()
 	ss.CaSig.Init()
 	ss.AMPAR.Init()
@@ -136,6 +138,7 @@ func (ss *SpineState) InitCode() {
 
 func (ss *SpineState) Zero() {
 	ss.Time = 0
+	ss.Kinase.Zero()
 	ss.NMDAR.Zero()
 	ss.CaSig.Zero()
 	ss.AMPAR.Zero()
@@ -146,6 +149,7 @@ func (ss *SpineState) Zero() {
 
 func (ss *SpineState) Integrate(d *SpineState) {
 	ss.Time += chem.IntegrationDt
+	ss.Kinase.Integrate(&d.Kinase)
 	ss.NMDAR.Integrate(&d.NMDAR)
 	ss.CaSig.Integrate(&d.CaSig)
 	ss.AMPAR.Integrate(&d.AMPAR)
@@ -154,6 +158,7 @@ func (ss *SpineState) Integrate(d *SpineState) {
 func (ss *SpineState) Log(dt *etable.Table, row int) {
 	dt.SetCellFloat("VmS", row, ss.VmS)
 	dt.SetCellFloat("PreSpike", row, ss.PreSpike)
+	ss.Kinase.Log(dt, row)
 	ss.NMDAR.Log(dt, row)
 	ss.CaSig.Log(dt, row)
 	ss.AMPAR.Log(dt, row)
@@ -162,6 +167,7 @@ func (ss *SpineState) Log(dt *etable.Table, row int) {
 func (ss *SpineState) ConfigLog(sch *etable.Schema) {
 	*sch = append(*sch, etable.Column{"VmS", etensor.FLOAT64, nil, nil})
 	*sch = append(*sch, etable.Column{"PreSpike", etensor.FLOAT64, nil, nil})
+	ss.Kinase.ConfigLog(sch)
 	ss.NMDAR.ConfigLog(sch)
 	ss.CaSig.ConfigLog(sch)
 	ss.AMPAR.ConfigLog(sch)
@@ -170,6 +176,7 @@ func (ss *SpineState) ConfigLog(sch *etable.Schema) {
 // Spine represents all of the state and parameters of the Spine
 // involved in LTP / LTD
 type Spine struct {
+	Kinase KinaseParams `desc:"Kinase parameters"`
 	NMDAR  NMDARParams  `desc:"NMDA receptors"`
 	Ca     CaParams     `desc:"Ca buffering and diffusion parameters"`
 	CaM    CaMParams    `desc:"CaM calmodulin Ca binding parameters"`
@@ -185,6 +192,7 @@ type Spine struct {
 }
 
 func (sp *Spine) Defaults() {
+	sp.Kinase.Defaults()
 	sp.NMDAR.Defaults()
 	sp.Ca.Defaults()
 	sp.CaM.Defaults()
@@ -220,6 +228,8 @@ func (sp *Spine) Step() {
 			sp.States.PreSpikeT = sp.States.Time
 		}
 	}
+
+	sp.Kinase.Step(&sp.States.Kinase, &sp.Deltas.Kinase, sp.States.CaSig.CaM.PSD.Active(), sp.States.CaSig.Ca.PSD)
 
 	sp.NMDAR.Step(&sp.States.NMDAR, &sp.Deltas.NMDAR, vms, chem.CoFmN(sp.States.CaSig.Ca.PSD, PSDVol), chem.CoFmN(sp.States.CaSig.CaM.PSD.CaM[2], PSDVol), chem.CoFmN(sp.States.CaSig.CaM.PSD.CaM[3], PSDVol), preSpike, &sp.Deltas.CaSig.Ca.PSD)
 

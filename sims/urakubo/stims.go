@@ -660,7 +660,7 @@ func ThetaErrCompFun() {
 
 		tmsec := 0
 		ss.Init()
-		ss.RunQuiet(10)
+		// ss.RunQuiet(10)
 
 		for ri := 0; ri < ss.NReps; ri++ {
 			Sp := float32(1)
@@ -697,6 +697,9 @@ func ThetaErrCompFun() {
 						return
 					}
 					tmsec++
+					if pi == 1 && (dur-msec) == 50 {
+						ss.Spine.Kinase.DWt(&ss.Spine.States.Kinase)
+					}
 				}
 			}
 			ss.Spine.States.PreSpike = 0
