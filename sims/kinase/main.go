@@ -93,6 +93,9 @@ type NeuronEx struct {
 	Gak        float32 `desc:"AK total conductance"`
 	AKm        float32 `desc:"AK M gate -- activates with increasing Vm"`
 	AKh        float32 `desc:"AK H gate -- deactivates with increasing Vm"`
+	PreSpike   float32 `desc:"1 = the presynaptic neuron spiked"`
+	PreSpikeT  float32 `desc:"time when pre last spiked, in sec (from spine.Time)"`
+	PreISI     float32 `desc:"ISI between last spike and prior one"`
 }
 
 func (nex *NeuronEx) Init() {
@@ -104,6 +107,9 @@ func (nex *NeuronEx) Init() {
 	nex.Gak = 0
 	nex.AKm = 0
 	nex.AKh = 1
+	nex.PreSpike = 0
+	nex.PreSpikeT = -1
+	nex.PreISI = -1
 }
 
 // Sim encapsulates the entire simulation model, and we define all the
@@ -112,39 +118,42 @@ func (nex *NeuronEx) Init() {
 // as arguments to methods, and provides the core GUI interface (note the view tags
 // for the fields which provide hints to how things should be displayed).
 type Sim struct {
-	Net         *axon.Network            `view:"no-inline" desc:"the network -- click to view / edit parameters for layers, prjns, etc"`
-	Spine       Spine                    `desc:"the spine state with Kinase intracellular model"`
-	Neuron      *axon.Neuron             `view:"no-inline" desc:"the neuron"`
-	NeuronEx    NeuronEx                 `view:"no-inline" desc:"extra neuron state for additional channels: VGCC, AK"`
-	Params      params.Sets              `view:"no-inline" desc:"full collection of param sets"`
-	Stim        Stims                    `desc:"what stimulation to drive with"`
-	ISISec      float64                  `desc:"inter-stimulus-interval in seconds -- between reps"`
-	NReps       int                      `desc:"number of repetitions -- takes 100 to produce classic STDP"`
-	FinalSecs   float64                  `def:"20,50,100" desc:"number of seconds to run after the manipulation -- results are strongest after 100, decaying somewhat after that point -- 20 shows similar qualitative results but weaker, 50 is pretty close to 100 -- less than 20 not recommended."`
-	DurMsec     int                      `desc:"duration for activity window"`
-	SendHz      float32                  `desc:"sending firing frequency (used as minus phase for ThetaErr)"`
-	RecvHz      float32                  `desc:"receiving firing frequency (used as plus phase for ThetaErr)"`
-	GeStim      float32                  `desc:"stimulating current injection"`
-	DeltaT      int                      `desc:"in msec, difference of Tpost - Tpre == pos = LTP, neg = LTD STDP"`
-	DeltaTRange int                      `desc:"range for sweep of DeltaT -- actual range is - to +"`
-	DeltaTInc   int                      `desc:"increment for sweep of DeltaT"`
-	RGClamp     bool                     `desc:"use Ge current clamping instead of distrete pulsing for firing rate-based manips, e.g., ThetaErr"`
-	Opts        SimOpts                  `view:"inline" desc:"global simulation options controlling major differences in behavior"`
-	GluN2BN     float64                  `desc:"total initial amount of GluN2B"`
-	DAPK1AutoK  float64                  `desc:"strength of AutoK autophosphorylation of DAPK1 -- must be strong enough to balance CaM drive"`
-	DAPK1_AMPAR float64                  `desc:"strength of AMPAR inhibitory effect from DAPK1"`
-	DAPK1lrate  float64                  `desc:"multiplier for diff between DAPK1 and CaMKII"`
-	CaNDAPK1    float64                  `desc:"Km for the CaM dephosphorylation of DAPK1"`
-	VmDend      bool                     `desc:"use dendritic Vm signal for driving spine channels"`
-	NMDAAxon    bool                     `desc:"use the Axon NMDA channel instead of the allosteric Kinase one"`
-	NMDAGbar    float32                  `def:"0,0.15" desc:"strength of NMDA current -- 0.15 default for posterior cortex"`
-	GABABGbar   float32                  `def:"0,0.2" desc:"strength of GABAB current -- 0.2 default for posterior cortex"`
-	VGCC        chans.VGCCParams         `desc:"VGCC parameters: set Gbar > 0 to include"`
-	AK          chans.AKParams           `desc:"A-type potassium channel parameters: set Gbar > 0 to include"`
-	CaTarg      CaState                  `desc:"target calcium level for CaTarg stim"`
-	InitWt      float64                  `inactive:"+" desc:"initial weight value: Trp_AMPA value at baseline"`
-	Logs        map[string]*etable.Table `view:"no-inline" desc:"all logs"`
-	Plots       map[string]*eplot.Plot2D `view:"-" desc:"all plots"`
+	Net          *axon.Network            `view:"no-inline" desc:"the network -- click to view / edit parameters for layers, prjns, etc"`
+	Spine        Spine                    `desc:"the spine state with Kinase intracellular model"`
+	Neuron       *axon.Neuron             `view:"no-inline" desc:"the neuron"`
+	NeuronEx     NeuronEx                 `view:"no-inline" desc:"extra neuron state for additional channels: VGCC, AK"`
+	KinaseSyn    KinaseState              `view:"no-inline" desc:"kinase synapse state values"`
+	KinaseParams KinaseParams             `view:"no-inline" desc:"kinase parameters"`
+	Params       params.Sets              `view:"no-inline" desc:"full collection of param sets"`
+	Stim         Stims                    `desc:"what stimulation to drive with"`
+	KinaseOnly   bool                     `desc:"only run the kinase algorithm, not the detailed biophysical Urakobo-based model"`
+	ISISec       float64                  `desc:"inter-stimulus-interval in seconds -- between reps"`
+	NReps        int                      `desc:"number of repetitions -- takes 100 to produce classic STDP"`
+	FinalSecs    float64                  `def:"20,50,100" desc:"number of seconds to run after the manipulation -- results are strongest after 100, decaying somewhat after that point -- 20 shows similar qualitative results but weaker, 50 is pretty close to 100 -- less than 20 not recommended."`
+	DurMsec      int                      `desc:"duration for activity window"`
+	SendHz       float32                  `desc:"sending firing frequency (used as minus phase for ThetaErr)"`
+	RecvHz       float32                  `desc:"receiving firing frequency (used as plus phase for ThetaErr)"`
+	GeStim       float32                  `desc:"stimulating current injection"`
+	DeltaT       int                      `desc:"in msec, difference of Tpost - Tpre == pos = LTP, neg = LTD STDP"`
+	DeltaTRange  int                      `desc:"range for sweep of DeltaT -- actual range is - to +"`
+	DeltaTInc    int                      `desc:"increment for sweep of DeltaT"`
+	RGClamp      bool                     `desc:"use Ge current clamping instead of distrete pulsing for firing rate-based manips, e.g., ThetaErr"`
+	Opts         SimOpts                  `view:"inline" desc:"global simulation options controlling major differences in behavior"`
+	GluN2BN      float64                  `desc:"total initial amount of GluN2B"`
+	DAPK1AutoK   float64                  `desc:"strength of AutoK autophosphorylation of DAPK1 -- must be strong enough to balance CaM drive"`
+	DAPK1_AMPAR  float64                  `desc:"strength of AMPAR inhibitory effect from DAPK1"`
+	DAPK1lrate   float64                  `desc:"multiplier for diff between DAPK1 and CaMKII"`
+	CaNDAPK1     float64                  `desc:"Km for the CaM dephosphorylation of DAPK1"`
+	VmDend       bool                     `desc:"use dendritic Vm signal for driving spine channels"`
+	NMDAAxon     bool                     `desc:"use the Axon NMDA channel instead of the allosteric Kinase one"`
+	NMDAGbar     float32                  `def:"0,0.15" desc:"strength of NMDA current -- 0.15 default for posterior cortex"`
+	GABABGbar    float32                  `def:"0,0.2" desc:"strength of GABAB current -- 0.2 default for posterior cortex"`
+	VGCC         chans.VGCCParams         `desc:"VGCC parameters: set Gbar > 0 to include"`
+	AK           chans.AKParams           `desc:"A-type potassium channel parameters: set Gbar > 0 to include"`
+	CaTarg       CaState                  `desc:"target calcium level for CaTarg stim"`
+	InitWt       float64                  `inactive:"+" desc:"initial weight value: Trp_AMPA value at baseline"`
+	Logs         map[string]*etable.Table `view:"no-inline" desc:"all logs"`
+	Plots        map[string]*eplot.Plot2D `view:"-" desc:"all plots"`
 
 	// internal state - view:"-"
 	Msec      int              `inactive:"+" desc:"current cycle of updating"`
@@ -167,12 +176,13 @@ func (ss *Sim) New() {
 	ss.Opts.Defaults()
 	ss.Spine.Defaults()
 	ss.Spine.Init()
+	ss.KinaseSyn.Init()
 	ss.InitWt = ss.Spine.States.AMPAR.Trp.Tot
 	ss.Net = &axon.Network{}
 	ss.Params = ParamSets
-	ss.Stim = ThetaErrComp
+	ss.Stim = STDP // ThetaErrComp
 	ss.ISISec = 0.8
-	ss.NReps = 10
+	ss.NReps = 1
 	ss.FinalSecs = 0
 	ss.DurMsec = 200
 	ss.SendHz = 50
@@ -188,6 +198,7 @@ func (ss *Sim) New() {
 func (ss *Sim) Defaults() {
 	ss.Opts.Defaults()
 	ss.Spine.Defaults()
+	ss.KinaseParams.Defaults()
 	ss.GluN2BN = 2
 	ss.DAPK1AutoK = DAPK1AutoK
 	ss.DAPK1_AMPAR = ss.Spine.AMPAR.Phos.DAPK1_AMPAR
@@ -322,6 +333,7 @@ func (ss *Sim) Init() {
 	ss.Spine.NMDAR.GluN2BN = chem.CoToN(ss.GluN2BN, PSDVol)             // 120 works for N2B only (no DAPK1)
 	ss.Spine.DAPK1.CaNSer308.SetKmVol(ss.CaNDAPK1, CytVol, 1.34, 0.335) // 10: 11 μM Km = 0.0031724
 	ss.Spine.Init()
+	ss.KinaseSyn.Init()
 	ss.InitWt = ss.Spine.States.AMPAR.Trp.Tot
 	ss.NeuronEx.Init()
 	ss.Msec = 0
@@ -368,13 +380,24 @@ func (ss *Sim) RunStim() {
 }
 
 // NeuronUpdt updates the neuron and spine for given msec
-func (ss *Sim) NeuronUpdt(msec int, ge, gi float32) {
+func (ss *Sim) NeuronUpdt(msec int, ge, gi float32, prespike bool) {
 	ss.Msec = msec
 	ly := ss.Net.LayerByName("Neuron").(axon.AxonLayer).AsAxon()
 	nrn := ss.Neuron
 	nex := &ss.NeuronEx
 
 	vbio := chans.VToBio(nrn.Vm) // dend
+
+	if prespike {
+		ftime := float32(ss.Spine.States.Time)
+		nex.PreSpike = 1
+		if nex.PreSpikeT > 0 {
+			nex.PreISI = ftime - nex.PreSpikeT
+		}
+		nex.PreSpikeT = ftime
+	} else {
+		nex.PreSpike = 0
+	}
 
 	// note: Ge should only
 	nrn.GeRaw = ge
@@ -403,9 +426,6 @@ func (ss *Sim) NeuronUpdt(msec int, ge, gi float32) {
 	}
 	nrn.Gi += nrn.GgabaB
 
-	// todo: Ca from NMDAAxon
-	ss.Spine.Ca.SetInject(float64(nex.VGCCJcaPSD), float64(nex.VGCCJcaCyt))
-
 	psd_pca := float32(1.7927e5 * 0.04) //  SVR_PSD
 	cyt_pca := float32(1.0426e5 * 0.04) // SVR_CYT
 
@@ -417,7 +437,15 @@ func (ss *Sim) NeuronUpdt(msec int, ge, gi float32) {
 	ly.Act.VmFmG(nrn)
 	ly.Act.ActFmG(nrn)
 
-	ss.Spine.StepTime(0.001)
+	// todo: Ca from NMDAAxon
+	ss.Spine.Ca.SetInject(float64(nex.VGCCJcaPSD), float64(nex.VGCCJcaCyt))
+	ss.Spine.States.PreSpike = float64(nex.PreSpike)
+
+	ss.KinaseParams.Step(&ss.KinaseSyn, ss.Neuron, &ss.NeuronEx, float32(ss.Spine.States.CaSig.Ca.PSD))
+
+	if !ss.KinaseOnly {
+		ss.Spine.StepTime(0.001)
+	}
 }
 
 // LogDefault does default logging for current Msec
@@ -458,7 +486,7 @@ func (ss *Sim) GraphRun(secs float64, n int) {
 	nms := int(secs / 0.001)
 	sms := ss.Msec
 	for msec := 0; msec < nms; msec++ {
-		ss.NeuronUpdt(sms+msec, 0, 0)
+		ss.NeuronUpdt(sms+msec, 0, 0, false)
 		ss.LogDefault(n)
 		if ss.StopNow {
 			break
@@ -470,7 +498,7 @@ func (ss *Sim) RunQuiet(secs float64) {
 	nms := int(secs / 0.001)
 	sms := ss.Msec
 	for msec := 0; msec < nms; msec++ {
-		ss.NeuronUpdt(sms+msec, 0, 0)
+		ss.NeuronUpdt(sms+msec, 0, 0, false)
 		if ss.StopNow {
 			break
 		}
@@ -511,6 +539,8 @@ func (ss *Sim) LogTime(dt *etable.Table, row int) {
 	dt.SetCellFloat("AKm", row, float64(nex.AKm))
 	dt.SetCellFloat("AKh", row, float64(nex.AKh))
 
+	ss.KinaseSyn.Log(dt, row)
+
 	ss.Spine.Log(dt, row)
 }
 
@@ -544,6 +574,8 @@ func (ss *Sim) ConfigTimeLog(dt *etable.Table) {
 		{"AKm", etensor.FLOAT64, nil, nil},
 		{"AKh", etensor.FLOAT64, nil, nil},
 	}
+
+	ss.KinaseSyn.ConfigLog(&sch)
 
 	ss.Spine.ConfigLog(&sch)
 
@@ -587,12 +619,16 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 
 	plt.SetColParams("VmS", eplot.Off, eplot.FixMin, -70, eplot.FloatMax, 1)
 	plt.SetColParams("PreSpike", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_Ca", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_CaMact", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PSD_Ca", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PSD_CaMact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 
-	plt.SetColParams("Ds", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
-	plt.SetColParams("Ps", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
-	plt.SetColParams("Wt", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("Ca", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("CaP", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("CaI", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("Ds", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("Ps", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("Wt", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("DWt", eplot.Off, eplot.FloatMin, -1, eplot.FloatMax, 1)
 
 	plt.SetColParams("Cyt_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)

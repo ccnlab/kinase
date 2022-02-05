@@ -200,7 +200,7 @@ func PerMsec(orig []float64) []float64 {
 func BaselineFun() {
 	ss := &TheSim
 	for msec := 0; msec < 500000; msec++ { // 500000 = 500 sec for full baseline
-		ss.NeuronUpdt(msec, 0, 0)
+		ss.NeuronUpdt(msec, 0, 0, false)
 		ss.LogDefault(0)
 		if ss.StopNow {
 			break
@@ -214,7 +214,7 @@ func CaTargFun() {
 	ss := &TheSim
 	ss.Spine.Ca.SetBuffTarg(ss.CaTarg.Cyt, ss.CaTarg.PSD)
 	for msec := 0; msec < 20000; msec++ {
-		ss.NeuronUpdt(msec, 0, 0)
+		ss.NeuronUpdt(msec, 0, 0, false)
 		ss.LogDefault(0)
 		if ss.StopNow {
 			break
@@ -236,7 +236,7 @@ func ClampCa1Fun() {
 		}
 		cca := bca + ((ca - bca) / 3)
 		ss.Spine.Ca.SetClamp(cca, ca)
-		ss.NeuronUpdt(msec, 0, 0)
+		ss.NeuronUpdt(msec, 0, 0, false)
 		ss.LogDefault(0)
 		if ss.StopNow {
 			break
@@ -255,16 +255,12 @@ func STDPFun() {
 
 	for msec := 0; msec < tott; msec++ {
 		ims := msec % 1000
-		if ims == psms {
-			ss.Spine.States.PreSpike = 1
-		} else {
-			ss.Spine.States.PreSpike = 0
-		}
+		prespike := ims == psms
 		ge := float32(0.0)
 		if ims >= toff && ims < toff+dur {
 			ge = ss.GeStim
 		}
-		ss.NeuronUpdt(msec, ge, 0)
+		ss.NeuronUpdt(msec, ge, 0, prespike)
 		ss.LogDefault(0)
 		if ss.StopNow {
 			break
@@ -289,16 +285,12 @@ func STDPSweepFun() {
 
 		for msec := 0; msec < tott; msec++ {
 			ims := msec % 1000
-			if ims == psms {
-				ss.Spine.States.PreSpike = 1
-			} else {
-				ss.Spine.States.PreSpike = 0
-			}
+			prespike := ims == psms
 			ge := float32(0.0)
 			if ims >= toff && ims < toff+dur {
 				ge = ss.GeStim
 			}
-			ss.NeuronUpdt(msec, ge, 0)
+			ss.NeuronUpdt(msec, ge, 0, prespike)
 			ss.LogDefault(0)
 			if ss.StopNow {
 				ss.Stopped()
@@ -334,16 +326,12 @@ func STDPPacketSweepFun() {
 		for ri := 0; ri < ss.NReps; ri++ {
 			for msec := 0; msec < ss.DurMsec; msec++ {
 				ims := msec % isi
-				if ims == sms {
-					ss.Spine.States.PreSpike = 1
-				} else {
-					ss.Spine.States.PreSpike = 0
-				}
+				prespike := ims == sms
 				ge := float32(0.0)
 				if ims == rms {
 					ge = ss.GeStim
 				}
-				ss.NeuronUpdt(msec, ge, 0)
+				ss.NeuronUpdt(msec, ge, 0, prespike)
 				ss.LogDefault(0)
 				if ss.StopNow {
 					ss.Stopped()
@@ -372,11 +360,10 @@ func PoissonFun() {
 
 		for msec := 0; msec < ss.DurMsec; msec++ {
 			Sp *= rand.Float32()
+			prespike := false
 			if Sp <= Sint {
-				ss.Spine.States.PreSpike = 1
+				prespike = true
 				Sp = 1
-			} else {
-				ss.Spine.States.PreSpike = 0
 			}
 
 			ge := float32(0.0)
@@ -386,14 +373,13 @@ func PoissonFun() {
 				Rp = 1
 			}
 
-			ss.NeuronUpdt(tmsec, ge, 0)
+			ss.NeuronUpdt(tmsec, ge, 0, prespike)
 			ss.LogDefault(0)
 			if ss.StopNow {
 				break
 			}
 			tmsec++
 		}
-		ss.Spine.States.PreSpike = 0
 		ss.GraphRun(ss.ISISec, 0)
 	}
 	ss.GraphRun(ss.FinalSecs, 0)
@@ -410,20 +396,18 @@ func SPoissonRGClampFun() {
 
 		for msec := 0; msec < ss.DurMsec; msec++ {
 			Sp *= rand.Float32()
+			prespike := false
 			if Sp <= Sint {
-				ss.Spine.States.PreSpike = 1
+				prespike = true
 				Sp = 1
-			} else {
-				ss.Spine.States.PreSpike = 0
 			}
 
-			ss.NeuronUpdt(msec, ss.GeStim, 0)
+			ss.NeuronUpdt(msec, ss.GeStim, 0, prespike)
 			ss.LogDefault(0)
 			if ss.StopNow {
 				break
 			}
 		}
-		ss.Spine.States.PreSpike = 0
 		ss.GraphRun(ss.ISISec, 0)
 	}
 	ss.GraphRun(ss.FinalSecs, 0)
@@ -448,11 +432,10 @@ func PoissonHzSweepFun() {
 
 				for msec := 0; msec < ss.DurMsec; msec++ {
 					Sp *= rand.Float32()
+					prespike := false
 					if Sp <= Sint {
-						ss.Spine.States.PreSpike = 1
+						prespike = true
 						Sp = 1
-					} else {
-						ss.Spine.States.PreSpike = 0
 					}
 
 					ge := float32(0.0)
@@ -462,14 +445,13 @@ func PoissonHzSweepFun() {
 						Rp = 1
 					}
 
-					ss.NeuronUpdt(msec, ge, 0)
+					ss.NeuronUpdt(msec, ge, 0, prespike)
 					ss.LogDefault(0)
 					if ss.StopNow {
 						ss.Stopped()
 						return
 					}
 				}
-				ss.Spine.States.PreSpike = 0
 				ss.GraphRun(ss.ISISec, 0)
 			}
 			ss.GraphRun(ss.FinalSecs, 0)
@@ -498,11 +480,10 @@ func PoissonDurSweepFun() {
 
 				for msec := 0; msec < dur; msec++ {
 					Sp *= rand.Float32()
+					prespike := false
 					if Sp <= Sint {
-						ss.Spine.States.PreSpike = 1
+						prespike = true
 						Sp = 1
-					} else {
-						ss.Spine.States.PreSpike = 0
 					}
 
 					ge := float32(0.0)
@@ -512,14 +493,13 @@ func PoissonDurSweepFun() {
 						Rp = 1
 					}
 
-					ss.NeuronUpdt(msec, ge, 0)
+					ss.NeuronUpdt(msec, ge, 0, prespike)
 					ss.LogDefault(0)
 					if ss.StopNow {
 						ss.Stopped()
 						return
 					}
 				}
-				ss.Spine.States.PreSpike = 0
 				ss.GraphRun(ss.ISISec, 0)
 			}
 			ss.GraphRun(ss.FinalSecs, 0)
@@ -550,11 +530,10 @@ func OpPhaseDurSweepFun() {
 
 				for msec := 0; msec < dur; msec++ {
 					fms := float32(msec)
+					prespike := false
 					if fms-Sp >= Sint {
-						ss.Spine.States.PreSpike = 1
+						prespike = true
 						Sp = fms
-					} else {
-						ss.Spine.States.PreSpike = 0
 					}
 
 					ge := float32(0.0)
@@ -563,14 +542,13 @@ func OpPhaseDurSweepFun() {
 						Rp = fms
 					}
 
-					ss.NeuronUpdt(msec, ge, 0)
+					ss.NeuronUpdt(msec, ge, 0, prespike)
 					ss.LogDefault(0)
 					if ss.StopNow {
 						ss.Stopped()
 						return
 					}
 				}
-				ss.Spine.States.PreSpike = 0
 				ss.GraphRun(ss.ISISec, 0)
 			}
 			ss.GraphRun(ss.FinalSecs, 0)
@@ -606,11 +584,10 @@ func ThetaErrFun() {
 			Rint := mat32.Exp(-1000.0 / float32(rhz))
 			for msec := 0; msec < dur; msec++ {
 				Sp *= rand.Float32()
+				prespike := false
 				if Sp <= Sint {
-					ss.Spine.States.PreSpike = 1
+					prespike = true
 					Sp = 1
-				} else {
-					ss.Spine.States.PreSpike = 0
 				}
 
 				ge := float32(0.0)
@@ -623,7 +600,7 @@ func ThetaErrFun() {
 					ge = RGeStimForHz(float32(rhz))
 				}
 
-				ss.NeuronUpdt(tmsec, ge, 0)
+				ss.NeuronUpdt(tmsec, ge, 0, prespike)
 				ss.LogDefault(0)
 				if ss.StopNow {
 					ss.Stopped()
@@ -632,7 +609,6 @@ func ThetaErrFun() {
 				tmsec++
 			}
 		}
-		ss.Spine.States.PreSpike = 0
 		ss.GraphRun(ss.ISISec, 0)
 		tmsec = ss.Msec
 	}
@@ -673,11 +649,10 @@ func ThetaErrCompFun() {
 				Rint := mat32.Exp(-1000.0 / float32(rhz))
 				for msec := 0; msec < dur; msec++ {
 					Sp *= rand.Float32()
+					prespike := false
 					if Sp <= Sint {
-						ss.Spine.States.PreSpike = 1
+						prespike = true
 						Sp = 1
-					} else {
-						ss.Spine.States.PreSpike = 0
 					}
 
 					ge := float32(0.0)
@@ -690,19 +665,15 @@ func ThetaErrCompFun() {
 						ge = RGeStimForHz(float32(rhz))
 					}
 
-					ss.NeuronUpdt(tmsec, ge, 0)
+					ss.NeuronUpdt(tmsec, ge, 0, prespike)
 					ss.LogDefault(itr)
 					if ss.StopNow {
 						ss.Stopped()
 						return
 					}
 					tmsec++
-					if pi == 1 && (dur-msec) == 50 {
-						ss.Spine.Kinase.DWt(&ss.Spine.States.Kinase)
-					}
 				}
 			}
-			ss.Spine.States.PreSpike = 0
 			ss.GraphRun(ss.ISISec, itr)
 			tmsec = ss.Msec
 		}
@@ -749,11 +720,10 @@ func ThetaErrSweepFun() {
 					Rint := mat32.Exp(-1000.0 / float32(rhz))
 					for msec := 0; msec < dur; msec++ {
 						Sp *= rand.Float32()
+						prespike := false
 						if Sp <= Sint {
-							ss.Spine.States.PreSpike = 1
+							prespike = true
 							Sp = 1
-						} else {
-							ss.Spine.States.PreSpike = 0
 						}
 
 						ge := float32(0.0)
@@ -766,7 +736,7 @@ func ThetaErrSweepFun() {
 							ge = RGeStimForHz(float32(rhz))
 						}
 
-						ss.NeuronUpdt(tmsec, ge, 0)
+						ss.NeuronUpdt(tmsec, ge, 0, prespike)
 						ss.LogDefault(0)
 						if ss.StopNow {
 							ss.Stopped()
@@ -775,7 +745,6 @@ func ThetaErrSweepFun() {
 						tmsec++
 					}
 				}
-				ss.Spine.States.PreSpike = 0
 				ss.GraphRun(ss.ISISec, 0)
 				tmsec = ss.Msec
 			}
@@ -824,11 +793,10 @@ func ThetaErrAllSweepFun() {
 							Rint := mat32.Exp(-1000.0 / float32(rhz))
 							for msec := 0; msec < dur; msec++ {
 								Sp *= rand.Float32()
+								prespike := false
 								if Sp <= Sint {
-									ss.Spine.States.PreSpike = 1
+									prespike = true
 									Sp = 1
-								} else {
-									ss.Spine.States.PreSpike = 0
 								}
 
 								ge := float32(0.0)
@@ -841,7 +809,7 @@ func ThetaErrAllSweepFun() {
 									ge = RGeStimForHz(float32(rhz))
 								}
 
-								ss.NeuronUpdt(msec, ge, 0)
+								ss.NeuronUpdt(msec, ge, 0, prespike)
 								ss.LogDefault(0)
 								if ss.StopNow {
 									ss.Stopped()
@@ -849,7 +817,6 @@ func ThetaErrAllSweepFun() {
 								}
 							}
 						}
-						ss.Spine.States.PreSpike = 0
 						ss.GraphRun(ss.ISISec, 0)
 					}
 					ss.GraphRun(ss.FinalSecs, 0)

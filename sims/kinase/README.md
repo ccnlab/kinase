@@ -3,27 +3,43 @@
 This model is developing a new learning mechanisms based on the interactions between two kinases: CaMKII and DAPK1, which promote LTP and LTD respectively.   Computationally, DAPK1 represents the minus phase, and CaMKII represents the plus phase, with the subtractive relationship as expressed in the CHL learning algorithm:
 $$ dW = X+Y+ - X-Y- $$
 
-The model is being developed at multiple levels:
+The recent data from the Zito lab confirms the basic predictions of this learning rule, but many questions remain about the detailed underlying mechanisms and computational implications.
 
-* A biophysically-detailed model based on Urakubo et al, 2008, augmented with GluN2B binding of the two kinases, producing a competition between LTP and LTD.  The GluN2B binding for CaMKII has worked well, and DAPK1 is largely guesswork but currently is showing integration behavior, and a slower time constant than CaMKII, but it is not sufficiently bounded and it is unclear how to scale its dynamics relative to CaMKII.  Also, it is unclear how the other PP factors (PP1, PP2A, CaN) play into the story -- these might be important for scoping the learning window and altering dynamics.
+The model is being developed at multiple levels, with the two overarching goals of understanding biological mechanisms and exploring computational implications / advantages thereof.
+
+* The most biophysically-detailed model is based on Urakubo et al, 2008, augmented with GluN2B binding of the two kinases, producing a competition between LTP and LTD.  The GluN2B binding for CaMKII has worked well, and DAPK1 is largely guesswork but currently is showing integration behavior, and a slower time constant than CaMKII, but it is not sufficiently bounded and it is unclear how to scale its dynamics relative to CaMKII.  Also, it is unclear how the other PP factors (PP1, PP2A, CaN) play into the story -- these might be important for scoping the learning window and altering dynamics.
 
 * Various potential levels of abstraction building up from from the detailed model, bridging to a high-level abstract model that can be run on large scale models.
 
 * The fully abstracted model that runs at scale.
 
-There are various ideas at play currently, in addition to the above:
+The issues in terms of biological mechanisms and computational benefits are elaborated below.
 
-* The one major remaining (perennial) computational / mechanistic problem is: how does the system know it is in the minus phase vs. the plus phase?  In short, LTD / DAPK1 has a longer time constant of integration (medium scale in the XCAL framework), while LTP / CaMKII is faster: but that alone is likely insufficient to get robust error-driven learning.
+## Biological Mechanisms
 
-* A big assumption is that the network dynamics build in a natural theta-phase learning dynamic (via pulvinar predictive learning or hippocampal theta etc), so the remaining issue is how the synaptic dynamics entrain for that.
+The major overarching (perennial) question is: how does the system know it is in the minus phase vs. the plus phase?
 
-* The Urakubo model targets the induction, not maintenance, functions of CaMKII: thus, there is some window after a bout of synaptic activity when these other actin-based functions of CaMKII kick in -- we need to account for that, and associated thresholds etc.
+We start with the following assumptions based on existing work:
 
-* In particular, the system may be in a kind of labile kinase-battle state until this critical off signal occurs, at which point the relative balance between CaMKII and DAPK1 determines the direction of wt change -- this is a novel and appealing way of thinking about how the model knows it is in the plus vs. minus phase: in short, it doesn't need to -- instead it just needs to know when the plus phase *ends* -- that is when learning occurs.  This also has the benefit of naturally blocking learning on repeated inputs -- only after a transition does learning really stamp in.
+* The network dynamics have a natural theta-phase activity dynamic, via pulvinar predictive learning or hippocampal theta, which establishes a temporal ordering of minus-then-plus phases, at roughly the 200 msec theta cycle window.
 
-* 
+* LTD / DAPK1 has a longer time constant of integration (medium scale in the XCAL framework), while LTP / CaMKII is faster (short scale in XCAL).  This aligns with the theta activation dynamics, such that DAPK1 naturally reflects more of the minus phase, while CaMKII reflects more of the plus phase.  In the current axon model, STau is 10 while MTau is 40, building on a common SSTau signal integrated with a 40msec time constant.
 
+If you just learn based on the continuous kinase signals in a fully continuous manner, it probably would not result in reliable EDL signal (todo: test this!).  Thus, some additional "learn now" signal is likely required.  Here are some ideas.
 
+* Learn at silence: due to sparse activity (10-20%), each synapse is relatively unlikely to experience continuous activity across both sender and receiver within a given theta cycle (e.g., $.1 * .1 = .01 = 1 / 100$).  Thus, there is likely to be a distinct window of synaptic activity, followed by silence.  This silence provides a reasonable timing cue for the end of the plus phase -- e.g., whatever happened roughly 200 msec prior to silence counts for learning.  The only problem would be if the plus phase goes completely silent, but this is likely to be relatively rare -- usually it is just a decrease in activity.  Also, there is a question about whether activity strictly on either side (pre only or post only) would cause a false alarm?  This relates to the Ca driver question below.
+
+* The learn-at-silence idea also has the benefit of naturally blocking learning on repeated inputs -- only the last event in a sequence of repeated synaptic activations would lead to learning.
+
+* The learn-at-silence idea is consistent with the Urakubo model, which targets the induction, not maintenance, functions of CaMKII: thus, there is some window after a bout of synaptic activity when these other actin-based functions of CaMKII kick in -- we need to account for that, and associated thresholds etc.   In particular, the system may be in a kind of labile kinase-battle state until this critical off signal occurs, at which point the relative balance between CaMKII and DAPK1 determines the direction of wt change. 
+
+## Computational Issues: Average of Product vs. Product of Averages
+
+One of the most important computational differences for the kinase learning rule is that in Leabra and initially in Axon, the average activations were computed separately for sender and receiver, and then their product used for the CHL learning mechanism, whereas synaptic calcium directly reflects a product of sender and receiver activation, which is then averaged (i.e., an average of a product, vs. a product of averages).  In the rate-code based Leabra model, this did not matter too much because the neuron activations didn't change too much over the course of a trial.
+
+With discrete spiking, the *only* way to be sensitive to more detailed correlations in pre-post spiking activity is to compute the average of the products!  This entails significant computational cost in updating the average on a per-synapse, per-spike basis, but at least we should be able to do it per-spike and not every cycle, using the ISI values on Send and Recv neurons to optimize computation.
+
+This raises the second most important question: how to actually compute the synaptic calcium signal in the first place.  This requires making a simplified model of the allosteric NMDA receptor.
 
 # Urakubo
 
