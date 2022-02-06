@@ -67,6 +67,8 @@ var ParamSets = params.Sets{
 				Params: params.Params{
 					"Layer.Act.Spike.Tr":     "7",
 					"Layer.Act.Spike.RTau":   "3", // maybe could go a bit wider even
+					"Layer.Act.Dend.GbarR":   "0.25",
+					"Layer.Act.NMDA.MgC":     "0.42", // def 0.28
 					"Layer.Act.Dt.VmTau":     "1",
 					"Layer.Act.Dt.VmDendTau": "1",
 					"Layer.Act.Dt.VmSteps":   "2",
@@ -85,6 +87,7 @@ var ParamSets = params.Sets{
 
 // Extra state for neuron -- VGCC and AK
 type NeuronEx struct {
+	NMDAGmg    float32 `desc:"NMDA mg-based blocking conductance"`
 	Gvgcc      float32 `desc:"VGCC total conductance"`
 	VGCCm      float32 `desc:"VGCC M gate -- activates with increasing Vm"`
 	VGCCh      float32 `desc:"VGCC H gate -- deactivates with increasing Vm"`
@@ -99,6 +102,7 @@ type NeuronEx struct {
 }
 
 func (nex *NeuronEx) Init() {
+	nex.NMDAGmg = 0
 	nex.Gvgcc = 0
 	nex.VGCCm = 0
 	nex.VGCCh = 1
@@ -180,9 +184,9 @@ func (ss *Sim) New() {
 	ss.InitWt = ss.Spine.States.AMPAR.Trp.Tot
 	ss.Net = &axon.Network{}
 	ss.Params = ParamSets
-	ss.Stim = STDP // ThetaErrComp
+	ss.Stim = ThetaErrComp
 	ss.ISISec = 0.8
-	ss.NReps = 1
+	ss.NReps = 10
 	ss.FinalSecs = 0
 	ss.DurMsec = 200
 	ss.SendHz = 50
@@ -208,7 +212,7 @@ func (ss *Sim) Defaults() {
 	ss.NMDAGbar = 0.15 // 0.1 to 0.15 matches pre-spike increase in vm
 	ss.GABABGbar = 0.0 // 0.2
 	ss.VGCC.Defaults()
-	ss.VGCC.Gbar = 0.12 // 0.12 matches vgcc jca
+	ss.VGCC.Gbar = 0.0 // 0.12 matches vgcc jca
 	ss.AK.Defaults()
 	ss.AK.Gbar = 0 // todo: figure this out!
 	ss.CaTarg.Cyt = 10
@@ -406,6 +410,7 @@ func (ss *Sim) NeuronUpdt(msec int, ge, gi float32, prespike bool) {
 	nrn.Gi = gi
 	nrn.NMDA = ly.Act.NMDA.NMDA(nrn.NMDA, nrn.GeRaw, 1)
 	nrn.Gnmda = ly.Act.NMDA.Gnmda(nrn.NMDA, nrn.VmDend) // gbar = 0 if !NMDAAxon
+	nex.NMDAGmg = ly.Act.NMDA.GFmV(nrn.VmDend)
 	nrn.GABAB, nrn.GABABx = ly.Act.GABAB.GABAB(nrn.GABAB, nrn.GABABx, nrn.Gi)
 	nrn.GgabaB = ly.Act.GABAB.GgabaB(nrn.GABAB, nrn.VmDend)
 
@@ -527,6 +532,7 @@ func (ss *Sim) LogTime(dt *etable.Table, row int) {
 	dt.SetCellFloat("AvgISI", row, float64(nrn.ISIAvg))
 	dt.SetCellFloat("VmDend", row, float64(nrn.VmDend))
 	dt.SetCellFloat("NMDA", row, float64(nrn.NMDA))
+	dt.SetCellFloat("NMDAGmg", row, float64(nex.NMDAGmg))
 	dt.SetCellFloat("Gnmda", row, float64(nrn.Gnmda))
 	dt.SetCellFloat("GABAB", row, float64(nrn.GABAB))
 	dt.SetCellFloat("GgabaB", row, float64(nrn.GgabaB))
@@ -562,6 +568,7 @@ func (ss *Sim) ConfigTimeLog(dt *etable.Table) {
 		{"AvgISI", etensor.FLOAT64, nil, nil},
 		{"VmDend", etensor.FLOAT64, nil, nil},
 		{"NMDA", etensor.FLOAT64, nil, nil},
+		{"NMDAGmg", etensor.FLOAT64, nil, nil},
 		{"Gnmda", etensor.FLOAT64, nil, nil},
 		{"GABAB", etensor.FLOAT64, nil, nil},
 		{"GgabaB", etensor.FLOAT64, nil, nil},
@@ -587,8 +594,9 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.Params.XAxisCol = "Time"
 	plt.SetTable(dt)
 	// order of params: on, fixMin, min, fixMax, max
-	plt.SetColParams("Time", eplot.Off, eplot.FloatMin, 0, eplot.FloatMax, 0)
+	// plt.SetColParams("Time", eplot.Off, eplot.FloatMin, 0, eplot.FixMax, 0.25)
 	// plt.SetColParams("Time", eplot.Off, eplot.FixMin, .48, eplot.FixMax, .54)
+	plt.SetColParams("Time", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Ge", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 1)
 	plt.SetColParams("Inet", eplot.Off, eplot.FixMin, -.2, eplot.FixMax, 1)
 	plt.SetColParams("Vm", eplot.On, eplot.FixMin, 0, eplot.FixMax, 1)
@@ -599,6 +607,7 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.SetColParams("AvgISI", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("VmDend", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("NMDA", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("NMDAGmg", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Gnmda", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("GABAB", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("GgabaB", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
@@ -619,16 +628,25 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 
 	plt.SetColParams("VmS", eplot.Off, eplot.FixMin, -70, eplot.FloatMax, 1)
 	plt.SetColParams("PreSpike", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_Ca", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PSD_Ca", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_CaMact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 
-	plt.SetColParams("Ca", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
-	plt.SetColParams("CaP", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
-	plt.SetColParams("CaI", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("Ca", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("NMDAo", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("NMDAi", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
 	plt.SetColParams("Ds", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
 	plt.SetColParams("Ps", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("AvgSS", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("AvgS", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("AvgM", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("AvgSLrn", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("AvgMLrn", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
 	plt.SetColParams("Wt", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
 	plt.SetColParams("DWt", eplot.Off, eplot.FloatMin, -1, eplot.FloatMax, 1)
+
+	plt.SetColParams("NMDA_Mg", eplot.Off, eplot.FloatMin, -1, eplot.FloatMax, 1)
+	plt.SetColParams("NMDA_Nopen", eplot.Off, eplot.FloatMin, -1, eplot.FloatMax, 1)
+	plt.SetColParams("NMDA_G", eplot.Off, eplot.FloatMin, -1, eplot.FloatMax, 1)
 
 	plt.SetColParams("Cyt_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)

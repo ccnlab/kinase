@@ -235,11 +235,11 @@ func (nr *NMDARParams) StepCaCaM(c, d *NMDARState, vm, ca, c2, c3 float64, spike
 func (nr *NMDARParams) Step(c, d *NMDARState, vm, ca, c2, c3 float64, spike bool, dca *float64) {
 	nr.StepCaCaM(c, d, vm, ca, c2, c3, spike, dca)
 
-	c.Mg = 1 / (1 + 0.4202*math.Exp(-0.062*vm)) // Mg(1.5)/3.57
+	c.Mg = 1.0 / (1.0 + 0.4202*math.Exp(-0.062*vm)) // Mg(1.5)/3.57
 	if vm > -0.1 && vm < 0.1 {
 		c.Vca = (1.0 / (0.0756 + 0.5*vm)) * c.Mg
 	} else {
-		c.Vca = -vm / (1 - math.Exp(0.0756*vm)) * c.Mg
+		c.Vca = -vm / (1.0 - math.Exp(0.0756*vm)) * c.Mg
 	}
 	c.Jca = c.Vca * nr.Pca * c.Nopen
 	c.G = c.Mg * nr.Gmax * c.Nopen
