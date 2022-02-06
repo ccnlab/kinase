@@ -7,6 +7,8 @@ The recent data from the Zito lab confirms the basic predictions of this learnin
 
 The model is being developed at multiple levels, with the two overarching goals of understanding biological mechanisms and exploring computational implications / advantages thereof.
 
+TODO: need terms for the different levels of detail.
+
 * The most biophysically-detailed model is based on Urakubo et al, 2008, augmented with GluN2B binding of the two kinases, producing a competition between LTP and LTD.  The GluN2B binding for CaMKII has worked well, and DAPK1 is largely guesswork but currently is showing integration behavior, and a slower time constant than CaMKII, but it is not sufficiently bounded and it is unclear how to scale its dynamics relative to CaMKII.  Also, it is unclear how the other PP factors (PP1, PP2A, CaN) play into the story -- these might be important for scoping the learning window and altering dynamics.
 
 * Various potential levels of abstraction building up from from the detailed model, bridging to a high-level abstract model that can be run on large scale models.

@@ -14,27 +14,24 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[Baseline-0]
-	_ = x[CaTarg-1]
-	_ = x[ClampCa1-2]
-	_ = x[GClamp-3]
-	_ = x[STDP-4]
-	_ = x[STDPSweep-5]
-	_ = x[STDPPacketSweep-6]
-	_ = x[Poisson-7]
-	_ = x[SPoissonRGClamp-8]
-	_ = x[PoissonHzSweep-9]
-	_ = x[PoissonDurSweep-10]
-	_ = x[OpPhaseDurSweep-11]
-	_ = x[ThetaErr-12]
-	_ = x[ThetaErrComp-13]
-	_ = x[ThetaErrSweep-14]
-	_ = x[ThetaErrAllSweep-15]
-	_ = x[StimsN-16]
+	_ = x[STDP-1]
+	_ = x[STDPSweep-2]
+	_ = x[STDPPacketSweep-3]
+	_ = x[Poisson-4]
+	_ = x[SPoissonRGClamp-5]
+	_ = x[PoissonHzSweep-6]
+	_ = x[PoissonDurSweep-7]
+	_ = x[OpPhaseDurSweep-8]
+	_ = x[ThetaErr-9]
+	_ = x[ThetaErrComp-10]
+	_ = x[ThetaErrSweep-11]
+	_ = x[ThetaErrAllSweep-12]
+	_ = x[StimsN-13]
 }
 
-const _Stims_name = "BaselineCaTargClampCa1GClampSTDPSTDPSweepSTDPPacketSweepPoissonSPoissonRGClampPoissonHzSweepPoissonDurSweepOpPhaseDurSweepThetaErrThetaErrCompThetaErrSweepThetaErrAllSweepStimsN"
+const _Stims_name = "BaselineSTDPSTDPSweepSTDPPacketSweepPoissonSPoissonRGClampPoissonHzSweepPoissonDurSweepOpPhaseDurSweepThetaErrThetaErrCompThetaErrSweepThetaErrAllSweepStimsN"
 
-var _Stims_index = [...]uint8{0, 8, 14, 22, 28, 32, 41, 56, 63, 78, 92, 107, 122, 130, 142, 155, 171, 177}
+var _Stims_index = [...]uint8{0, 8, 12, 21, 36, 43, 58, 72, 87, 102, 110, 122, 135, 151, 157}
 
 func (i Stims) String() string {
 	if i < 0 || i >= Stims(len(_Stims_index)-1) {

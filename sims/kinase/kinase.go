@@ -30,7 +30,7 @@ type KinaseState struct {
 
 func (ks *KinaseState) Init() {
 	ks.Zero()
-	ks.Wt = 1
+	ks.Wt = 0.5
 }
 
 func (ks *KinaseState) Zero() {
@@ -105,7 +105,7 @@ func (kr *KinaseRates) Step(s, cam float32) float32 {
 // KinaseNMDA computes NMDA and resulting calcium from simulated allosteric NMDA receptors
 // Targets the NMDAo Nopen number of open NMDA channels
 type KinaseNMDA struct {
-	CaGain   float32 `def:"5.5,300" desc:"overall Ca Gain factor: 5.5 for CaVdrive, 300 without"`
+	CaGain   float32 `def:"2,5.5,300" desc:"overall Ca Gain factor: 2 for normalized with CaVdrive, 5.5 for CaVdrive, 300 without"`
 	PreOpen  float32 `def:"0.25" desc:"driver max in number open from presynaptic firing"`
 	PreInhib float32 `def:"1" desc:"increment in inhibition from presynaptic firing"`
 	DecayTau float32 `def:"30" desc:"conductance decay time constant"`
@@ -114,7 +114,7 @@ type KinaseNMDA struct {
 }
 
 func (kp *KinaseNMDA) Defaults() {
-	kp.CaGain = 5.5 // 300
+	kp.CaGain = 2 // 5.5 // 300
 	kp.PreOpen = 0.25
 	kp.PreInhib = 1
 	kp.DecayTau = 30
@@ -156,6 +156,7 @@ type LrnActAvgParams struct {
 	SSTau  float32 `def:"40" min:"1" desc:"time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life), for continuously updating the super-short time-scale AvgSS value -- this is provides a pre-integration step before integrating into the AvgS short time scale -- it is particularly important for spiking -- in general 4 is the largest value without starting to impair learning, but a value of 7 can be combined with m_in_s = 0 with somewhat worse results"`
 	STau   float32 `def:"10" min:"1" desc:"time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life), for continuously updating the short time-scale AvgS value from the super-short AvgSS value (cascade mode) -- AvgS represents the plus phase learning signal that reflects the most recent past information"`
 	MTau   float32 `def:"40" min:"1" desc:"time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life), for continuously updating the medium time-scale AvgM value from the short AvgS value (cascade mode) -- AvgM represents the minus phase learning signal that reflects the expectation representation prior to experiencing the outcome (in addition to the outcome) -- the default value of 10 generally cannot be exceeded without impairing learning"`
+	MScale float32 `min:"0" desc:"rescaling of M factor (multiplies AvgS when it drives M) to compensate for overall decrease in Ca influx over course of theta cycle"`
 	LrnM   float32 `def:"0.1,0" min:"0" max:"1" desc:"how much of the medium term average activation to mix in with the short (plus phase) to compute the Neuron AvgSLrn variable that is used for the unit's short-term average in learning. This is important to ensure that when unit turns off in plus phase (short time scale), enough medium-phase trace remains so that learning signal doesn't just go all the way to 0, at which point no learning would take place -- typically need faster time constant for updating S such that this trace of the M signal is lost -- can set SSTau=7 and set this to 0 but learning is generally somewhat worse"`
 	Init   float32 `def:"0.15" min:"0" max:"1" desc:"initial value for average"`
 
@@ -169,7 +170,7 @@ type LrnActAvgParams struct {
 func (aa *LrnActAvgParams) AvgsFmCa(ca float32, avgSS, avgS, avgM, avgSLrn, avgMLrn *float32) {
 	*avgSS += aa.SSDt * (ca - *avgSS)
 	*avgS += aa.SDt * (*avgSS - *avgS)
-	*avgM += aa.MDt * (*avgS - *avgM)
+	*avgM += aa.MDt * (aa.MScale**avgS - *avgM)
 	*avgMLrn = *avgM
 
 	thrS := *avgS
@@ -191,9 +192,10 @@ func (aa *LrnActAvgParams) Update() {
 
 func (aa *LrnActAvgParams) Defaults() {
 	aa.MinLrn = 0.02
-	aa.SSTau = 40 // 20 for 25 cycle qtr
+	aa.SSTau = 40
 	aa.STau = 10
-	aa.MTau = 40 // 20 for 25 cycle qtr
+	aa.MTau = 40
+	aa.MScale = 0.93
 	aa.LrnM = 0.1
 	aa.Init = 0.15
 	aa.Update()
@@ -233,14 +235,11 @@ func (kp *KinaseParams) Step(c *KinaseState, nrn *axon.Neuron, nex *NeuronEx, ca
 
 	kp.AvgCa.AvgsFmCa(ca, &c.AvgSS, &c.AvgS, &c.AvgM, &c.AvgSLrn, &c.AvgMLrn)
 
-	// todo:
-	// if pi == 1 && (dur-msec) == 50 {
-	// 	ss.Spine.Kinase.DWt(&ss.Spine.States.Kinase)
-	// }
-}
-
-// DWt computes weight change given values at this point
-func (kp *KinaseParams) DWt(c *KinaseState) {
-	c.DWt = kp.Lrate * (c.Ps - c.Ds)
-	c.Wt += c.DWt
+	if nex.LearnNow == 0 {
+		c.DWt = kp.Lrate * (c.AvgSLrn - c.AvgMLrn) // todo: xcal
+		c.Wt += c.DWt
+	}
+	if nex.LearnNow >= 0 {
+		nex.LearnNow += 1
+	}
 }

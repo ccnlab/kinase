@@ -99,6 +99,7 @@ type NeuronEx struct {
 	PreSpike   float32 `desc:"1 = the presynaptic neuron spiked"`
 	PreSpikeT  float32 `desc:"time when pre last spiked, in sec (from spine.Time)"`
 	PreISI     float32 `desc:"ISI between last spike and prior one"`
+	LearnNow   float32 `desc:"when 0, it is time to learn according to theta cycle, otherwise increments up unless still -1 from init"`
 }
 
 func (nex *NeuronEx) Init() {
@@ -114,6 +115,7 @@ func (nex *NeuronEx) Init() {
 	nex.PreSpike = 0
 	nex.PreSpikeT = -1
 	nex.PreISI = -1
+	nex.LearnNow = -1
 }
 
 // Sim encapsulates the entire simulation model, and we define all the
@@ -130,6 +132,7 @@ type Sim struct {
 	KinaseParams KinaseParams             `view:"no-inline" desc:"kinase parameters"`
 	Params       params.Sets              `view:"no-inline" desc:"full collection of param sets"`
 	Stim         Stims                    `desc:"what stimulation to drive with"`
+	KinaseLearn  bool                     `desc:"plot kinase-based learning outcome -- otherwise Urakubo"`
 	KinaseOnly   bool                     `desc:"only run the kinase algorithm, not the detailed biophysical Urakobo-based model"`
 	ISISec       float64                  `desc:"inter-stimulus-interval in seconds -- between reps"`
 	NReps        int                      `desc:"number of repetitions -- takes 100 to produce classic STDP"`
@@ -185,6 +188,7 @@ func (ss *Sim) New() {
 	ss.Net = &axon.Network{}
 	ss.Params = ParamSets
 	ss.Stim = ThetaErrComp
+	ss.KinaseLearn = true
 	ss.ISISec = 0.8
 	ss.NReps = 10
 	ss.FinalSecs = 0
@@ -487,6 +491,10 @@ func (ss *Sim) Stopped() {
 	}
 }
 
+func (ss *Sim) LearnNow() {
+	ss.NeuronEx.LearnNow = 0
+}
+
 func (ss *Sim) GraphRun(secs float64, n int) {
 	nms := int(secs / 0.001)
 	sms := ss.Msec
@@ -544,6 +552,7 @@ func (ss *Sim) LogTime(dt *etable.Table, row int) {
 	dt.SetCellFloat("Gak", row, float64(nex.Gak))
 	dt.SetCellFloat("AKm", row, float64(nex.AKm))
 	dt.SetCellFloat("AKh", row, float64(nex.AKh))
+	dt.SetCellFloat("LearnNow", row, float64(nex.LearnNow))
 
 	ss.KinaseSyn.Log(dt, row)
 
@@ -580,6 +589,7 @@ func (ss *Sim) ConfigTimeLog(dt *etable.Table) {
 		{"Gak", etensor.FLOAT64, nil, nil},
 		{"AKm", etensor.FLOAT64, nil, nil},
 		{"AKh", etensor.FLOAT64, nil, nil},
+		{"LearnNow", etensor.FLOAT64, nil, nil},
 	}
 
 	ss.KinaseSyn.ConfigLog(&sch)
@@ -596,7 +606,13 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	// order of params: on, fixMin, min, fixMax, max
 	// plt.SetColParams("Time", eplot.Off, eplot.FloatMin, 0, eplot.FixMax, 0.25)
 	// plt.SetColParams("Time", eplot.Off, eplot.FixMin, .48, eplot.FixMax, .54)
-	plt.SetColParams("Time", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+
+	// default:
+	for _, cn := range dt.ColNames {
+		plt.SetColParams(cn, eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	}
+
+	plt.SetColParams("Time", eplot.Off, eplot.FloatMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Ge", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 1)
 	plt.SetColParams("Inet", eplot.Off, eplot.FixMin, -.2, eplot.FixMax, 1)
 	plt.SetColParams("Vm", eplot.On, eplot.FixMin, 0, eplot.FixMax, 1)
@@ -619,12 +635,6 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.SetColParams("Gak", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("AKm", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("AKh", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-
-	for _, cn := range dt.ColNames {
-		if cn != "Time" {
-			plt.SetColParams(cn, eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-		}
-	}
 
 	plt.SetColParams("VmS", eplot.Off, eplot.FixMin, -70, eplot.FloatMax, 1)
 	plt.SetColParams("PreSpike", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
@@ -695,12 +705,15 @@ func (ss *Sim) LogDWt(dt *etable.Table, x, y float64) {
 	dt.SetCellFloat("X", row, x)
 	dt.SetCellFloat("Y", row, y)
 
-	wt := ss.Spine.States.AMPAR.Trp.Tot
-	dwt := (wt / ss.InitWt) - 1
-
-	dt.SetCellFloat("DWt", row, float64(dwt))
-
+	ss.KinaseSyn.Log(dt, row)
 	ss.Spine.Log(dt, row)
+
+	if !ss.KinaseLearn {
+		wt := ss.Spine.States.AMPAR.Trp.Tot
+		dwt := (wt / ss.InitWt) - 1
+
+		dt.SetCellFloat("DWt", row, float64(dwt))
+	}
 }
 
 func (ss *Sim) ConfigDWtLog(dt *etable.Table) {
@@ -712,9 +725,10 @@ func (ss *Sim) ConfigDWtLog(dt *etable.Table) {
 	sch := etable.Schema{
 		{"X", etensor.FLOAT64, nil, nil},
 		{"Y", etensor.FLOAT64, nil, nil},
-		{"DWt", etensor.FLOAT64, nil, nil},
+		// Wt, DWt come from kinase
 	}
 
+	ss.KinaseSyn.ConfigLog(&sch)
 	ss.Spine.ConfigLog(&sch)
 
 	dt.SetFromSchema(sch, 0)
@@ -726,7 +740,8 @@ func (ss *Sim) ConfigDWtPlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D 
 	plt.Params.LegendCol = "Y"
 	plt.SetTable(dt)
 	// order of params: on, fixMin, min, fixMax, max
-	plt.SetColParams("DWt", eplot.On, eplot.FixMin, -0.5, eplot.FixMax, 0.5)
+	plt.SetColParams("DWt", eplot.Off, eplot.FixMin, -0.5, eplot.FixMax, 0.5)
+	plt.SetColParams("Wt", eplot.On, eplot.FixMin, 0, eplot.FixMax, 1)
 
 	plt.SetColParams("PSD_CaMKIIact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_PP1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
@@ -754,12 +769,15 @@ func (ss *Sim) LogPhaseDWt(dt *etable.Table, sphz, rphz []int) {
 	dt.SetCellFloat("RMhz", row, float64(rphz[0]))
 	dt.SetCellFloat("RPhz", row, float64(rphz[1]))
 
-	wt := ss.Spine.States.AMPAR.Trp.Tot
-	dwt := (wt / ss.InitWt) - 1
-
-	dt.SetCellFloat("DWt", row, float64(dwt))
-
+	ss.KinaseSyn.Log(dt, row)
 	ss.Spine.Log(dt, row)
+
+	if !ss.KinaseLearn {
+		wt := ss.Spine.States.AMPAR.Trp.Tot
+		dwt := (wt / ss.InitWt) - 1
+
+		dt.SetCellFloat("DWt", row, float64(dwt))
+	}
 }
 
 func (ss *Sim) ConfigPhaseDWtLog(dt *etable.Table) {
@@ -775,9 +793,9 @@ func (ss *Sim) ConfigPhaseDWtLog(dt *etable.Table) {
 		{"SPhz", etensor.FLOAT64, nil, nil},
 		{"RMhz", etensor.FLOAT64, nil, nil},
 		{"RPhz", etensor.FLOAT64, nil, nil},
-		{"DWt", etensor.FLOAT64, nil, nil},
 	}
 
+	ss.KinaseSyn.ConfigLog(&sch)
 	ss.Spine.ConfigLog(&sch)
 
 	dt.SetFromSchema(sch, 0)
@@ -792,7 +810,8 @@ func (ss *Sim) ConfigPhaseDWtPlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Pl
 	plt.Params.Points = true
 	plt.Params.Lines = false
 	// order of params: on, fixMin, min, fixMax, max
-	plt.SetColParams("DWt", eplot.On, eplot.FixMin, -1, eplot.FixMax, 1)
+	plt.SetColParams("DWt", eplot.Off, eplot.FixMin, -0.5, eplot.FixMax, 0.5)
+	plt.SetColParams("Wt", eplot.On, eplot.FixMin, 0, eplot.FixMax, 1)
 	plt.SetColParams("CHL", eplot.Off, eplot.FixMin, -1, eplot.FixMax, 2)
 
 	plt.SetColParams("PSD_CaMKIIact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
