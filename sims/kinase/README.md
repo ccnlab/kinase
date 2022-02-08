@@ -7,13 +7,11 @@ The recent data from the Zito lab confirms the basic predictions of this learnin
 
 The model is being developed at multiple levels, with the two overarching goals of understanding biological mechanisms and exploring computational implications / advantages thereof.
 
-TODO: need terms for the different levels of detail.
+* **KinaseBMax:** The most biophysically-detailed model is based on Urakubo et al, 2008, augmented with GluN2B binding of the two kinases, producing a competition between LTP and LTD.  The GluN2B binding for CaMKII has worked well, and DAPK1 is largely guesswork but currently is showing integration behavior, and a slower time constant than CaMKII, but it is not sufficiently bounded and it is unclear how to scale its dynamics relative to CaMKII.  Also, it is unclear how the other PP factors (PP1, PP2A, CaN) play into the story -- these might be important for scoping the learning window and altering dynamics.
 
-* The most biophysically-detailed model is based on Urakubo et al, 2008, augmented with GluN2B binding of the two kinases, producing a competition between LTP and LTD.  The GluN2B binding for CaMKII has worked well, and DAPK1 is largely guesswork but currently is showing integration behavior, and a slower time constant than CaMKII, but it is not sufficiently bounded and it is unclear how to scale its dynamics relative to CaMKII.  Also, it is unclear how the other PP factors (PP1, PP2A, CaN) play into the story -- these might be important for scoping the learning window and altering dynamics.
+* **KinaseBx:** Various potential levels of abstraction building up from from the detailed model, bridging to a high-level abstract model that can be run on large scale models.
 
-* Various potential levels of abstraction building up from from the detailed model, bridging to a high-level abstract model that can be run on large scale models.
-
-* The fully abstracted model that runs at scale.
+* **Kinase:** The fully abstracted model that runs at scale, which will ultimately be what we call the "Kinase learning rule".  This will be a work in progress, starting with various levels of abstraction, the first of which is **KinaseAMax** that is the most abstract / pragmatic, as described below.
 
 The issues in terms of biological mechanisms and computational benefits are elaborated below.
 
@@ -42,6 +40,25 @@ One of the most important computational differences for the kinase learning rule
 With discrete spiking, the *only* way to be sensitive to more detailed correlations in pre-post spiking activity is to compute the average of the products!  This entails significant computational cost in updating the average on a per-synapse, per-spike basis, but at least we should be able to do it per-spike and not every cycle, using the ISI values on Send and Recv neurons to optimize computation.
 
 This raises the second most important question: how to actually compute the synaptic calcium signal in the first place.  This requires making a simplified model of the allosteric NMDA receptor.
+
+# KinaseAMax
+
+This is the most abstract, pragmatic starting model, using same SS, S, M cascading running-average computation on top of synaptic Ca computed directly from NMDA channels and VmDend, etc (same as used for driving good activation dynamics).  Learning automatically happens at end of ThetaCycle.
+
+Versions are noted by their Go emer/axon tag (bumping to 1.3.1 as start of the Kinase era).
+
+## v1.3.1
+
+* Urakubo-matching allosteric NMDA dynamics do NOT work well for soft bistability dynamic -- Inhib causes too much noise, like synaptic failure.  May work well at larger scale.  Sticking with `Tau = 100, MgC = 1, ITau = 1` (disabled).  Also `SnmdaDeplete` and `SeiDeplete` off -- also major source of noise, as discussed here: https://github.com/emer/axon/issues/28#issuecomment-1032297427
+
+* First thing I tried worked really well: Basic default `40/10/40` taus for `CaM, CaP, CaD` cascade, `DScale=0.93`, `MinLrn=0.02`, `Lrate.Base=0.005`.
+
+* `Jca` is pretty diffuse across all neurons -- not very discriminative from the recv side.  natural magnitudes around 5-10, which then translates to similar scale in Ca.
+
+* `SnmdaO` is highly distinctive -- filter on this for winnowing synapses to update (very convenient given sender-based approach).  Need to init Ca's all to 0 in final WtFmDWt, exclude updating Ca for anything with straight below-thr on sender AvgS, AvgM.  Note that filtering based on ISI = -1 did not seem to work -- excludes first spike data.
+
+* Overall, the pattern of weight change across recv neurons is very homogenous -- really need more of a postsynaptic selection factor.  VGCC?
+
 
 # Urakubo
 
