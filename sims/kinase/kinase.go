@@ -14,18 +14,28 @@ import (
 
 // KinaseState are synapse-specific Kinase algo state vars
 type KinaseState struct {
-	NMDAo   float32 `desc:"Open NMDA from kinase"`
-	NMDAi   float32 `desc:"Inhibition of NMDA from presynaptic firing"`
-	Ca      float32 `desc:"Computed Ca level"`
-	Ds      float32 `desc:"LTD-driving DAPK1-based time integrator state"`
-	Ps      float32 `desc:"LTP-driving CaMKII-based time integrator state"`
-	AvgSS   float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
-	AvgS    float32 `desc:"short time-scale average of spiking, as a running average over AvgSS -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see AvgSLrn)"`
-	AvgM    float32 `desc:"medium time-scale average of spiking, as a running average over AvgS -- represents the minus phase for error-driven learning"`
-	AvgSLrn float32 `desc:"short time-scale activation average that is used for learning -- typically includes a small contribution from AvgMLrn in addition to mostly AvgS, as determined by LrnActAvgParams.LrnM -- important to ensure that when neuron turns off in plus phase (short time scale), enough medium-phase trace remains so that learning signal doesn't just go all the way to 0, at which point no learning would take place -- AvgS is subject to thresholding prior to mixing so low values become zero"`
-	AvgMLrn float32 `desc:"medium time-scale activation average used in learning: subect to thresholding so low values become zero"`
-	Wt      float32 `desc:"simulated weight"`
-	DWt     float32 `desc:"change in weight"`
+	NMDAo float32 `desc:"Open NMDA from kinase"`
+	NMDAi float32 `desc:"Inhibition of NMDA from presynaptic firing"`
+	Ca    float32 `desc:"Computed Ca level"`
+	Ds    float32 `desc:"LTD-driving DAPK1-based time integrator state"`
+	Ps    float32 `desc:"LTP-driving CaMKII-based time integrator state"`
+	CaM   float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
+	CaP   float32 `desc:"short time-scale average of spiking, as a running average over CaM -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see CaPLrn)"`
+	CaD   float32 `desc:"medium time-scale average of spiking, as a running average over CaP -- represents the minus phase for error-driven learning"`
+	RCa   float32 `desc:"Computed Ca level - recv"`
+	RCaM  float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
+	RCaP  float32 `desc:"short time-scale average of spiking, as a running average over CaM -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see CaPLrn)"`
+	RCaD  float32 `desc:"medium time-scale average of spiking, as a running average over CaP -- represents the minus phase for error-driven learning"`
+	SCa   float32 `desc:"Computed Ca level - send"`
+	SCaM  float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
+	SCaP  float32 `desc:"short time-scale average of spiking, as a running average over CaM -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see CaPLrn)"`
+	SCaD  float32 `desc:"medium time-scale average of spiking, as a running average over CaP -- represents the minus phase for error-driven learning"`
+	RSCa  float32 `desc:"Computed Ca level - send"`
+	RSCaM float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
+	RSCaP float32 `desc:"short time-scale average of spiking, as a running average over CaM -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see CaPLrn)"`
+	RSCaD float32 `desc:"medium time-scale average of spiking, as a running average over CaP -- represents the minus phase for error-driven learning"`
+	Wt    float32 `desc:"simulated weight"`
+	DWt   float32 `desc:"change in weight"`
 }
 
 func (ks *KinaseState) Init() {
@@ -39,11 +49,17 @@ func (ks *KinaseState) Zero() {
 	ks.Ca = 0
 	ks.Ds = 0
 	ks.Ps = 0
-	ks.AvgSS = 0
-	ks.AvgS = 0
-	ks.AvgM = 0
-	ks.AvgSLrn = 0
-	ks.AvgMLrn = 0
+	ks.CaM = 0
+	ks.CaP = 0
+	ks.CaD = 0
+	ks.RCa = 0
+	ks.RCaM = 0
+	ks.RCaP = 0
+	ks.RCaD = 0
+	ks.SCa = 0
+	ks.SCaM = 0
+	ks.SCaP = 0
+	ks.SCaD = 0
 	ks.Wt = 0
 	ks.DWt = 0
 }
@@ -54,11 +70,17 @@ func (ks *KinaseState) Log(dt *etable.Table, row int) {
 	dt.SetCellFloat("Ca", row, float64(ks.Ca))
 	dt.SetCellFloat("Ds", row, float64(ks.Ds))
 	dt.SetCellFloat("Ps", row, float64(ks.Ps))
-	dt.SetCellFloat("AvgSS", row, float64(ks.AvgSS))
-	dt.SetCellFloat("AvgS", row, float64(ks.AvgS))
-	dt.SetCellFloat("AvgM", row, float64(ks.AvgM))
-	dt.SetCellFloat("AvgSLrn", row, float64(ks.AvgSLrn))
-	dt.SetCellFloat("AvgMLrn", row, float64(ks.AvgMLrn))
+	dt.SetCellFloat("CaM", row, float64(ks.CaM))
+	dt.SetCellFloat("CaP", row, float64(ks.CaP))
+	dt.SetCellFloat("CaD", row, float64(ks.CaD))
+	dt.SetCellFloat("RCa", row, float64(ks.Ca))
+	dt.SetCellFloat("RCaM", row, float64(ks.CaM))
+	dt.SetCellFloat("RCaP", row, float64(ks.CaP))
+	dt.SetCellFloat("RCaD", row, float64(ks.CaD))
+	dt.SetCellFloat("SCa", row, float64(ks.Ca))
+	dt.SetCellFloat("SCaM", row, float64(ks.CaM))
+	dt.SetCellFloat("SCaP", row, float64(ks.CaP))
+	dt.SetCellFloat("SCaD", row, float64(ks.CaD))
 	dt.SetCellFloat("Wt", row, float64(ks.Wt))
 	dt.SetCellFloat("DWt", row, float64(ks.DWt))
 }
@@ -69,11 +91,17 @@ func (ks *KinaseState) ConfigLog(sch *etable.Schema) {
 	*sch = append(*sch, etable.Column{"Ca", etensor.FLOAT32, nil, nil})
 	*sch = append(*sch, etable.Column{"Ds", etensor.FLOAT32, nil, nil})
 	*sch = append(*sch, etable.Column{"Ps", etensor.FLOAT32, nil, nil})
-	*sch = append(*sch, etable.Column{"AvgSS", etensor.FLOAT32, nil, nil})
-	*sch = append(*sch, etable.Column{"AvgS", etensor.FLOAT32, nil, nil})
-	*sch = append(*sch, etable.Column{"AvgM", etensor.FLOAT32, nil, nil})
-	*sch = append(*sch, etable.Column{"AvgSLrn", etensor.FLOAT32, nil, nil})
-	*sch = append(*sch, etable.Column{"AvgMLrn", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"CaM", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"CaP", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"CaD", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"RCa", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"RCaM", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"RCaP", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"RCaD", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"SCa", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"SCaM", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"SCaP", etensor.FLOAT32, nil, nil})
+	*sch = append(*sch, etable.Column{"SCaD", etensor.FLOAT32, nil, nil})
 	*sch = append(*sch, etable.Column{"Wt", etensor.FLOAT32, nil, nil})
 	*sch = append(*sch, etable.Column{"DWt", etensor.FLOAT32, nil, nil})
 }
@@ -144,62 +172,51 @@ func (kp *KinaseNMDA) Step(ks *KinaseState, nrn *axon.Neuron, nex *NeuronEx) {
 	}
 }
 
-// LrnActAvgParams has rate constants for averaging over activations
+// KinaseSynParams has rate constants for averaging over activations
 // at different time scales, to produce the running average activation
 // values that then drive learning in the XCAL learning rules.
 // Is driven directly by spikes that increment running-average at super-short
 // timescale.  Time cycle of 50 msec quarters / theta window learning works
 // Cyc:50, SS:35 S:8, M:40 (best)
 // Cyc:25, SS:20, S:4, M:20
-type LrnActAvgParams struct {
-	MinLrn float32 `def:"0.02" desc:"minimum learning activation -- below this goes to zero"`
-	SSTau  float32 `def:"40" min:"1" desc:"time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life), for continuously updating the super-short time-scale AvgSS value -- this is provides a pre-integration step before integrating into the AvgS short time scale -- it is particularly important for spiking -- in general 4 is the largest value without starting to impair learning, but a value of 7 can be combined with m_in_s = 0 with somewhat worse results"`
-	STau   float32 `def:"10" min:"1" desc:"time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life), for continuously updating the short time-scale AvgS value from the super-short AvgSS value (cascade mode) -- AvgS represents the plus phase learning signal that reflects the most recent past information"`
-	MTau   float32 `def:"40" min:"1" desc:"time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life), for continuously updating the medium time-scale AvgM value from the short AvgS value (cascade mode) -- AvgM represents the minus phase learning signal that reflects the expectation representation prior to experiencing the outcome (in addition to the outcome) -- the default value of 10 generally cannot be exceeded without impairing learning"`
-	MScale float32 `def:"0.93" min:"0" desc:"rescaling of M factor (multiplies AvgS when it drives M) to compensate for overall decrease in Ca influx over course of theta cycle"`
-	LrnM   float32 `def:"0.1,0" min:"0" max:"1" desc:"how much of the medium term average activation to mix in with the short (plus phase) to compute the Neuron AvgSLrn variable that is used for the unit's short-term average in learning. This is important to ensure that when unit turns off in plus phase (short time scale), enough medium-phase trace remains so that learning signal doesn't just go all the way to 0, at which point no learning would take place -- typically need faster time constant for updating S such that this trace of the M signal is lost -- can set SSTau=7 and set this to 0 but learning is generally somewhat worse"`
-	Init   float32 `def:"0.15" min:"0" max:"1" desc:"initial value for average"`
+type KinaseSynParams struct {
+	On      bool    `desc:"if true, use Kinase learning algorithm instead of original XCal"`
+	SAvgThr float32 `def:"0.02" desc:"optimization for compute speed -- threshold on sending avg values to update Ca values -- depends on Ca clearing upon Wt update"`
+	MTau    float32 `def:"40" min:"1" desc:"CaM mean running-average time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life). This provides a pre-integration step before integrating into the CaP short time scale"`
+	PTau    float32 `def:"10" min:"1" desc:"LTP Ca-driven factor time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life). Continuously updates based on current CaI value, resulting in faster tracking of plus-phase signals."`
+	DTau    float32 `def:"40" min:"1" desc:"LTD Ca-driven factor time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life).  Continuously updates based on current CaP value, resulting in slower integration that still reflects earlier minus-phase signals."`
+	DScale  float32 `def:"0.93" desc:"scaling factor on CaD as it enters into the learning rule, to compensate for systematic decrease in activity over the course of a theta cycle"`
 
-	SSDt float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"rate = 1 / tau"`
-	SDt  float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"rate = 1 / tau"`
-	MDt  float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"rate = 1 / tau"`
-	LrnS float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"1-LrnM"`
+	MDt float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"rate = 1 / tau"`
+	PDt float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"rate = 1 / tau"`
+	DDt float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"rate = 1 / tau"`
 }
 
-// AvgsFmCa computes averages based on current Ca
-func (aa *LrnActAvgParams) AvgsFmCa(ca float32, avgSS, avgS, avgM, avgSLrn, avgMLrn *float32) {
-	*avgSS += aa.SSDt * (ca - *avgSS)
-	*avgS += aa.SDt * (*avgSS - *avgS)
-	*avgM += aa.MDt * (aa.MScale**avgS - *avgM)
-	*avgMLrn = *avgM
-
-	thrS := *avgS
-
-	if *avgMLrn < aa.MinLrn && thrS < aa.MinLrn {
-		*avgMLrn = 0
-		thrS = 0
-	}
-
-	*avgSLrn = aa.LrnS*thrS + aa.LrnM**avgMLrn
+func (kp *KinaseSynParams) Update() {
+	kp.MDt = 1 / kp.MTau
+	kp.PDt = 1 / kp.PTau
+	kp.DDt = 1 / kp.DTau
 }
 
-func (aa *LrnActAvgParams) Update() {
-	aa.SSDt = 1 / aa.SSTau
-	aa.SDt = 1 / aa.STau
-	aa.MDt = 1 / aa.MTau
-	aa.LrnS = 1 - aa.LrnM
+func (kp *KinaseSynParams) Defaults() {
+	kp.SAvgThr = 0.02
+	kp.MTau = 40
+	kp.PTau = 10
+	kp.DTau = 40
+	kp.DScale = 0.93
+	kp.Update()
 }
 
-func (aa *LrnActAvgParams) Defaults() {
-	aa.MinLrn = 0.02
-	aa.SSTau = 40
-	aa.STau = 10
-	aa.MTau = 40
-	aa.MScale = 0.93
-	aa.LrnM = 0.1
-	aa.Init = 0.15
-	aa.Update()
+// FmCa computes updates from current Ca value
+func (kp *KinaseSynParams) FmCa(ca float32, caM, caP, caD *float32) {
+	*caM += kp.MDt * (ca - *caM)
+	*caP += kp.PDt * (*caM - *caP)
+	*caD += kp.DDt * (*caP - *caD)
+}
 
+// DWt computes the weight change from CaP, CaD values
+func (kp *KinaseSynParams) DWt(caP, caD float32) float32 {
+	return caP - kp.DScale*caD
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -209,7 +226,7 @@ func (aa *LrnActAvgParams) Defaults() {
 type KinaseParams struct {
 	NMDA  KinaseNMDA      `view:"inline" desc:"Ca computation params"`
 	KinCa bool            `desc:"use the Kinase computed Ca instead of Urakubo"`
-	AvgCa LrnActAvgParams `view:"inline" desc:"average Ca based on standard chained SS, S, M timescales"`
+	SynCa KinaseSynParams `view:"inline" desc:"average Ca based on standard chained SS, S, M timescales"`
 	Drate KinaseRates     `desc:"rates for Ds state for LTD / DAPK1 -- Ca versions"`
 	Prate KinaseRates     `desc:"rates for Ps state for LTP / CaMKII -- Ca versions"`
 	Lrate float32         `desc:"learning rate"`
@@ -218,7 +235,7 @@ type KinaseParams struct {
 func (kp *KinaseParams) Defaults() {
 	kp.NMDA.Defaults()
 	kp.KinCa = true
-	kp.AvgCa.Defaults()
+	kp.SynCa.Defaults()
 	kp.Drate.Set(1.6, 0.7) // 1.6, 0.7
 	kp.Prate.Set(1.8, 0.8) // matches CaMKII
 	kp.Lrate = 0.2
@@ -233,10 +250,10 @@ func (kp *KinaseParams) Step(c *KinaseState, nrn *axon.Neuron, nex *NeuronEx, ca
 	c.Ds += kp.Drate.Step(c.Ds, ca)
 	c.Ps += kp.Prate.Step(c.Ps, ca)
 
-	kp.AvgCa.AvgsFmCa(ca, &c.AvgSS, &c.AvgS, &c.AvgM, &c.AvgSLrn, &c.AvgMLrn)
+	kp.SynCa.FmCa(ca, &c.CaM, &c.CaP, &c.CaD)
 
 	if nex.LearnNow == 0 {
-		c.DWt = kp.Lrate * (c.AvgSLrn - c.AvgMLrn) // todo: xcal
+		c.DWt = kp.Lrate * (c.CaP - c.CaD) // todo: xcal
 		c.Wt += c.DWt
 	}
 	if nex.LearnNow >= 0 {

@@ -66,13 +66,15 @@ var ParamSets = params.Sets{
 			{Sel: "Layer", Desc: "all defaults",
 				Params: params.Params{
 					"Layer.Act.Spike.Tr":     "7",
-					"Layer.Act.Spike.RTau":   "3", // maybe could go a bit wider even
-					"Layer.Act.Dend.GbarR":   "0.25",
+					"Layer.Act.Spike.RTau":   "3",    // maybe could go a bit wider even
 					"Layer.Act.NMDA.MgC":     "0.42", // def 0.28
+					"Layer.Act.Decay.Glong":  "0.6",  // 0.6
+					"Layer.Act.Dend.GbarExp": "0.5",  // 0.2 > 0.1 > 0
+					"Layer.Act.Dend.GbarR":   "6",    // 3 > 2 good for 0.2 -- too low rel to ExpGbar causes fast ini learning, but then unravels
+					"Layer.Act.Dt.VmDendTau": "5",    // 5 > 2.81 here but small effect
+					"Layer.Act.Dt.GeTau":     "5",
 					"Layer.Act.Dt.VmTau":     "1",
-					"Layer.Act.Dt.VmDendTau": "1",
 					"Layer.Act.Dt.VmSteps":   "2",
-					"Layer.Act.Dt.GeTau":     "1",    // not natural but fits spike current injection
 					"Layer.Act.VmRange.Max":  "0.97", // max for dendrite
 					"Layer.Act.Spike.ExpThr": "0.9",  // note: critical to keep < Max!
 					// Erev = .35 = -65 instead of -70
@@ -187,10 +189,10 @@ func (ss *Sim) New() {
 	ss.InitWt = ss.Spine.States.AMPAR.Trp.Tot
 	ss.Net = &axon.Network{}
 	ss.Params = ParamSets
-	ss.Stim = ThetaErrComp
+	ss.Stim = ThetaErr
 	ss.KinaseLearn = true
 	ss.ISISec = 0.8
-	ss.NReps = 10
+	ss.NReps = 1
 	ss.FinalSecs = 0
 	ss.DurMsec = 200
 	ss.SendHz = 50
@@ -409,12 +411,12 @@ func (ss *Sim) NeuronUpdt(msec int, ge, gi float32, prespike bool) {
 
 	// note: Ge should only
 	nrn.GeRaw = ge
+	nrn.GnmdaRaw = ge
 	ly.Act.Dt.GeSynFmRaw(nrn.GeRaw, &nrn.GeSyn, ly.Act.Init.Ge)
 	nrn.Ge = nrn.GeSyn
 	nrn.Gi = gi
-	nrn.NMDA = ly.Act.NMDA.NMDA(nrn.NMDA, nrn.GeRaw, 1)
-	nrn.Gnmda = ly.Act.NMDA.Gnmda(nrn.NMDA, nrn.VmDend) // gbar = 0 if !NMDAAxon
-	nex.NMDAGmg = ly.Act.NMDA.GFmV(nrn.VmDend)
+	ly.Act.NMDAFmRaw(nrn, 0)
+	nex.NMDAGmg = ly.Act.NMDA.MgGFmV(nrn.VmDend)
 	nrn.GABAB, nrn.GABABx = ly.Act.GABAB.GABAB(nrn.GABAB, nrn.GABABx, nrn.Gi)
 	nrn.GgabaB = ly.Act.GABAB.GgabaB(nrn.GABAB, nrn.VmDend)
 
@@ -539,9 +541,12 @@ func (ss *Sim) LogTime(dt *etable.Table, row int) {
 	dt.SetCellFloat("ISI", row, float64(nrn.ISI))
 	dt.SetCellFloat("AvgISI", row, float64(nrn.ISIAvg))
 	dt.SetCellFloat("VmDend", row, float64(nrn.VmDend))
-	dt.SetCellFloat("NMDA", row, float64(nrn.NMDA))
-	dt.SetCellFloat("NMDAGmg", row, float64(nex.NMDAGmg))
 	dt.SetCellFloat("Gnmda", row, float64(nrn.Gnmda))
+	dt.SetCellFloat("RnmdaSyn", row, float64(nrn.RnmdaSyn))
+	dt.SetCellFloat("RCa", row, float64(nrn.RCa))
+	dt.SetCellFloat("SnmdaO", row, float64(nrn.SnmdaO))
+	dt.SetCellFloat("SnmdaI", row, float64(nrn.SnmdaI))
+	dt.SetCellFloat("NMDAGmg", row, float64(nex.NMDAGmg))
 	dt.SetCellFloat("GABAB", row, float64(nrn.GABAB))
 	dt.SetCellFloat("GgabaB", row, float64(nrn.GgabaB))
 	dt.SetCellFloat("Gvgcc", row, float64(nex.Gvgcc))
@@ -576,9 +581,12 @@ func (ss *Sim) ConfigTimeLog(dt *etable.Table) {
 		{"ISI", etensor.FLOAT64, nil, nil},
 		{"AvgISI", etensor.FLOAT64, nil, nil},
 		{"VmDend", etensor.FLOAT64, nil, nil},
-		{"NMDA", etensor.FLOAT64, nil, nil},
-		{"NMDAGmg", etensor.FLOAT64, nil, nil},
 		{"Gnmda", etensor.FLOAT64, nil, nil},
+		{"RnmdaSyn", etensor.FLOAT64, nil, nil},
+		{"RCa", etensor.FLOAT64, nil, nil},
+		{"SnmdaO", etensor.FLOAT64, nil, nil},
+		{"SnmdaI", etensor.FLOAT64, nil, nil},
+		{"NMDAGmg", etensor.FLOAT64, nil, nil},
 		{"GABAB", etensor.FLOAT64, nil, nil},
 		{"GgabaB", etensor.FLOAT64, nil, nil},
 		{"Gvgcc", etensor.FLOAT64, nil, nil},
@@ -622,9 +630,12 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.SetColParams("ISI", eplot.Off, eplot.FixMin, -2, eplot.FloatMax, 1)
 	plt.SetColParams("AvgISI", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("VmDend", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("NMDA", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("NMDAGmg", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Gnmda", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("RnmdaSyn", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("RCa", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("SnmdaO", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("SnmdaI", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("NMDAGmg", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("GABAB", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("GgabaB", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Gvgcc", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
