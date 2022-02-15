@@ -53,7 +53,7 @@ However the resulting Ca levels are not particularly accurately captured as show
 
 ![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
 
-![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom1.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
+![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
 
 ![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom2.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
 
