@@ -54,8 +54,8 @@ var TheOpts SimOpts
 
 func (so *SimOpts) Defaults() {
 	so.InitBaseline = true
-	so.UseN2B = true
-	so.UseDAPK1 = true
+	so.UseN2B = false
+	so.UseDAPK1 = false
 }
 
 // ParamSets for basic parameters
@@ -657,11 +657,9 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.SetColParams("NMDAi", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
 	plt.SetColParams("Ds", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
 	plt.SetColParams("Ps", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
-	plt.SetColParams("AvgSS", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
-	plt.SetColParams("AvgS", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
-	plt.SetColParams("AvgM", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
-	plt.SetColParams("AvgSLrn", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
-	plt.SetColParams("AvgMLrn", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("CaM", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("CaP", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
+	plt.SetColParams("CaD", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 2)
 	plt.SetColParams("Wt", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)
 	plt.SetColParams("DWt", eplot.Off, eplot.FloatMin, -1, eplot.FloatMax, 1)
 

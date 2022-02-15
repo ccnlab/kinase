@@ -9,6 +9,7 @@ import (
 	"github.com/emer/axon/chans"
 	"github.com/emer/etable/etable"
 	"github.com/emer/etable/etensor"
+	"github.com/goki/ki/kit"
 	"github.com/goki/mat32"
 )
 
@@ -22,7 +23,6 @@ type KinaseState struct {
 	CaM   float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
 	CaP   float32 `desc:"short time-scale average of spiking, as a running average over CaM -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see CaPLrn)"`
 	CaD   float32 `desc:"medium time-scale average of spiking, as a running average over CaP -- represents the minus phase for error-driven learning"`
-	RCa   float32 `desc:"Computed Ca level - recv"`
 	RCaM  float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
 	RCaP  float32 `desc:"short time-scale average of spiking, as a running average over CaM -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see CaPLrn)"`
 	RCaD  float32 `desc:"medium time-scale average of spiking, as a running average over CaP -- represents the minus phase for error-driven learning"`
@@ -52,7 +52,6 @@ func (ks *KinaseState) Zero() {
 	ks.CaM = 0
 	ks.CaP = 0
 	ks.CaD = 0
-	ks.RCa = 0
 	ks.RCaM = 0
 	ks.RCaP = 0
 	ks.RCaD = 0
@@ -73,7 +72,6 @@ func (ks *KinaseState) Log(dt *etable.Table, row int) {
 	dt.SetCellFloat("CaM", row, float64(ks.CaM))
 	dt.SetCellFloat("CaP", row, float64(ks.CaP))
 	dt.SetCellFloat("CaD", row, float64(ks.CaD))
-	dt.SetCellFloat("RCa", row, float64(ks.Ca))
 	dt.SetCellFloat("RCaM", row, float64(ks.CaM))
 	dt.SetCellFloat("RCaP", row, float64(ks.CaP))
 	dt.SetCellFloat("RCaD", row, float64(ks.CaD))
@@ -94,7 +92,6 @@ func (ks *KinaseState) ConfigLog(sch *etable.Schema) {
 	*sch = append(*sch, etable.Column{"CaM", etensor.FLOAT32, nil, nil})
 	*sch = append(*sch, etable.Column{"CaP", etensor.FLOAT32, nil, nil})
 	*sch = append(*sch, etable.Column{"CaD", etensor.FLOAT32, nil, nil})
-	*sch = append(*sch, etable.Column{"RCa", etensor.FLOAT32, nil, nil})
 	*sch = append(*sch, etable.Column{"RCaM", etensor.FLOAT32, nil, nil})
 	*sch = append(*sch, etable.Column{"RCaP", etensor.FLOAT32, nil, nil})
 	*sch = append(*sch, etable.Column{"RCaD", etensor.FLOAT32, nil, nil})
@@ -172,6 +169,38 @@ func (kp *KinaseNMDA) Step(ks *KinaseState, nrn *axon.Neuron, nex *NeuronEx) {
 	}
 }
 
+// KinaseRules are different options for Kinase-based learning rules
+type KinaseRules int32
+
+//go:generate stringer -type=KinaseRules
+
+var KiT_KinaseRules = kit.Enums.AddEnum(KinaseRulesN, kit.NotBitFlag, nil)
+
+func (ev KinaseRules) MarshalJSON() ([]byte, error)  { return kit.EnumMarshalJSON(ev) }
+func (ev *KinaseRules) UnmarshalJSON(b []byte) error { return kit.EnumUnmarshalJSON(ev, b) }
+
+// The time scales
+const (
+	// NeurSpkCa uses neuron-level spike-driven calcium signals
+	// integrated at P vs. D time scales -- this is the original
+	// Leabra and Axon XCAL / CHL learning rule.
+	NeurSpkCa KinaseRules = iota
+
+	// SynSpkCaOR uses synapse-level spike-driven calcium signals
+	// with an OR rule for pre OR post spiking driving the CaM up,
+	// which is then integrated at P vs. D time scales.
+	// Basically a synapse version of original learning rule.
+	SynSpkCaOR
+
+	// SynNMDACa uses synapse-level NMDA-driven calcium signals
+	// (which can be either Urakubo allosteric or Kinase abstract)
+	// integrated at P vs. D time scales -- abstract version
+	// of the KinaseB biophysical learniung rule
+	SynNMDACa
+
+	KinaseRulesN
+)
+
 // KinaseSynParams has rate constants for averaging over activations
 // at different time scales, to produce the running average activation
 // values that then drive learning in the XCAL learning rules.
@@ -180,12 +209,13 @@ func (kp *KinaseNMDA) Step(ks *KinaseState, nrn *axon.Neuron, nex *NeuronEx) {
 // Cyc:50, SS:35 S:8, M:40 (best)
 // Cyc:25, SS:20, S:4, M:20
 type KinaseSynParams struct {
-	On      bool    `desc:"if true, use Kinase learning algorithm instead of original XCal"`
-	SAvgThr float32 `def:"0.02" desc:"optimization for compute speed -- threshold on sending avg values to update Ca values -- depends on Ca clearing upon Wt update"`
-	MTau    float32 `def:"40" min:"1" desc:"CaM mean running-average time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life). This provides a pre-integration step before integrating into the CaP short time scale"`
-	PTau    float32 `def:"10" min:"1" desc:"LTP Ca-driven factor time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life). Continuously updates based on current CaI value, resulting in faster tracking of plus-phase signals."`
-	DTau    float32 `def:"40" min:"1" desc:"LTD Ca-driven factor time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life).  Continuously updates based on current CaP value, resulting in slower integration that still reflects earlier minus-phase signals."`
-	DScale  float32 `def:"0.93" desc:"scaling factor on CaD as it enters into the learning rule, to compensate for systematic decrease in activity over the course of a theta cycle"`
+	Rule    KinaseRules `desc:"which learning rule to use"`
+	SpikeG  float32     `desc:"spiking gain for Spk rules"`
+	SAvgThr float32     `def:"0.02" desc:"optimization for compute speed -- threshold on sending avg values to update Ca values -- depends on Ca clearing upon Wt update"`
+	MTau    float32     `def:"40" min:"1" desc:"CaM mean running-average time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life). This provides a pre-integration step before integrating into the CaP short time scale"`
+	PTau    float32     `def:"10" min:"1" desc:"LTP Ca-driven factor time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life). Continuously updates based on current CaI value, resulting in faster tracking of plus-phase signals."`
+	DTau    float32     `def:"40" min:"1" desc:"LTD Ca-driven factor time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life).  Continuously updates based on current CaP value, resulting in slower integration that still reflects earlier minus-phase signals."`
+	DScale  float32     `def:"0.93" desc:"scaling factor on CaD as it enters into the learning rule, to compensate for systematic decrease in activity over the course of a theta cycle"`
 
 	MDt float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"rate = 1 / tau"`
 	PDt float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"rate = 1 / tau"`
@@ -199,6 +229,8 @@ func (kp *KinaseSynParams) Update() {
 }
 
 func (kp *KinaseSynParams) Defaults() {
+	kp.Rule = SynSpkCaOR
+	kp.SpikeG = 8
 	kp.SAvgThr = 0.02
 	kp.MTau = 40
 	kp.PTau = 10
@@ -250,7 +282,18 @@ func (kp *KinaseParams) Step(c *KinaseState, nrn *axon.Neuron, nex *NeuronEx, ca
 	c.Ds += kp.Drate.Step(c.Ds, ca)
 	c.Ps += kp.Prate.Step(c.Ps, ca)
 
-	kp.SynCa.FmCa(ca, &c.CaM, &c.CaP, &c.CaD)
+	switch kp.SynCa.Rule {
+	case NeurSpkCa:
+		// todo: don't have presynaptic neuron here.
+	case SynSpkCaOR:
+		spk := float32(0)
+		if nrn.Spike > 0 || nex.PreSpike > 0 {
+			spk = kp.SynCa.SpikeG
+		}
+		kp.SynCa.FmCa(spk, &c.CaM, &c.CaP, &c.CaD)
+	case SynNMDACa:
+		kp.SynCa.FmCa(ca, &c.CaM, &c.CaP, &c.CaD)
+	}
 
 	if nex.LearnNow == 0 {
 		c.DWt = kp.Lrate * (c.CaP - c.CaD) // todo: xcal

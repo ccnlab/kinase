@@ -41,6 +41,31 @@ With discrete spiking, the *only* way to be sensitive to more detailed correlati
 
 This raises the second most important question: how to actually compute the synaptic calcium signal in the first place.  This requires making a simplified model of the allosteric NMDA receptor.
 
+# Allosteric NMDA and resulting Ca flux
+
+![NMDAo in Urakubo vs. Kinase](results/fig_kinase_nmdao_thetaerr_nrep3_isi01.png?raw=true "Urakubo 08 NMDAo vs. simple Kinase NMDAo computation.")
+
+First, the number of open NMDA channels is driven entirely by presynaptic spiking & glu release, with an inhibitory factor, which can be easily captured with simple exponential rate equations as show in above figure.
+
+![PSD_Ca in Urakubo vs. Kinase RCa](results/fig_kinase_rca_thetaerr_nrep3_isi01.png?raw=true "Urakubo 08 PSD_Ca vs. simple Kinase RCa computation.")
+
+However the resulting Ca levels are not particularly accurately captured as show in the above figure.
+
+![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
+
+![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom1.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
+
+![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom2.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
+
+![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom3.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
+
+The above figures show that a very simple "OR" spike-driven Ca integration rule can *sort of* capture the complex allosteric dynamics from Urakubo.  The OR rule says that either a pre OR post spike drives an influx of Ca up to a max Ca driving level.  The CaM Tau = 15 here, with ThetaErr windows at 50 then 25 hz, repeated 3x with .1 sec ISI intervals.
+
+
+
+
+
+
 # KinaseAMax
 
 This is the most abstract, pragmatic starting model, using same SS, S, M cascading running-average computation on top of synaptic Ca computed directly from NMDA channels and VmDend, etc (same as used for driving good activation dynamics).  Learning automatically happens at end of ThetaCycle.
@@ -58,6 +83,22 @@ Versions are noted by their Go emer/axon tag (bumping to 1.3.1 as start of the K
 * `SnmdaO` is highly distinctive -- filter on this for winnowing synapses to update (very convenient given sender-based approach).  Need to init Ca's all to 0 in final WtFmDWt, exclude updating Ca for anything with straight below-thr on sender AvgS, AvgM.  Note that filtering based on ISI = -1 did not seem to work -- excludes first spike data.
 
 * Overall, the pattern of weight change across recv neurons is very homogenous -- really need more of a postsynaptic selection factor.  VGCC?
+
+* `lvis/sims/objrec` is showing significant hogging -- learns quickly then dies with hogging.  The lack of differentiation on recv side is clearly an issue.  
+
+* Some issues: 
+
+    + Not doing any actual time-integration of Ca -- all driven by instantaneous signals -- so VGCC is not really integrating that much over time -- only on CaM for 1 cycle.  In the biology, there is significant buffering / decay of Ca that would cause weaker signals to diminish significantly.  This is not captured.
+
+    + `VmDend` is a major issue too -- stays relatively high, reducing differentiation, MgG is kind of high baseline level for everything.
+    
+    + About 10x slower overall performance-wise -- 
+    
+## v1.3.2
+
+* Added `Dend.CaThr` on post-norm Ca (renamed Jca -> RCa) -- creates more differentiation on the recv side.  Reflects the effects of buffering.
+
+* Optimization: 
 
 
 # Urakubo
