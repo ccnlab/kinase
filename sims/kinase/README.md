@@ -139,8 +139,6 @@ The following plots show the behavior of the most abstract `SynSpkCaOR` synaptic
 
 This rule simply says that there is a "synaptic" spike impulse whenever *either* the pre or post: `SynSpk = SSpk || RSpk` -- either spike counts, but there is no specific interaction -- this is the least product-like.  This SynSpk value then drives the same cascade of time integrations, as usual, with the first CaM stage with a Tau of 10 serving to give a reasonable approximation of the biological Ca as computed above:
 
-![Kinase Ca vs. Urakubo, VGCC12](results/fig_kinase_kinca_thetaerr_nrep3_isi01_vgcc12.png?raw=true "Kinase computed Ca vs. Urakubo 08, VGCC=.12")
-
 ![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
 
 ![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
