@@ -129,7 +129,7 @@ func STDPFun() {
 		if ims >= toff && ims < toff+dur {
 			ge = ss.GeStim
 		}
-		if ims == toff+200 {
+		if ims == toff+ss.STDPLrnOff {
 			ss.LearnNow()
 		}
 		ss.NeuronUpdt(msec, ge, 0, prespike)
@@ -162,7 +162,7 @@ func STDPSweepFun() {
 			if ims >= toff && ims < toff+dur {
 				ge = ss.GeStim
 			}
-			if ims == toff+200 {
+			if ims == toff+ss.STDPLrnOff {
 				ss.LearnNow()
 			}
 			ss.NeuronUpdt(msec, ge, 0, prespike)

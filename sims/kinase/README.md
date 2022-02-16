@@ -1,7 +1,12 @@
 # Kinase
 
 This model is developing a new learning mechanisms based on the interactions between two kinases: CaMKII and DAPK1, which promote LTP and LTD respectively.   Computationally, DAPK1 represents the minus phase, and CaMKII represents the plus phase, with the subtractive relationship as expressed in the CHL learning algorithm:
-$$ dW = X+Y+ - X-Y- $$
+
+```
+    dW = (X^+ Y^+) - (X^- Y^-)
+```
+
+Where X = sending activation, Y = receiving, and superscripts indicate plus phase (outcome, target state) and minus phase (prediction, guess state) respectively.
 
 The recent data from the Zito lab confirms the basic predictions of this learning rule, but many questions remain about the detailed underlying mechanisms and computational implications.
 
@@ -17,7 +22,9 @@ The issues in terms of biological mechanisms and computational benefits are elab
 
 ## Biological Mechanisms
 
-The major overarching (perennial) question is: how does the system know it is in the minus phase vs. the plus phase?
+Aside from the process of accurately capturing the nature of the biochemistry driving synaptic plasticity, there are some important questions that the biology may help us understand.
+
+For example, a major unsolved problem is: how does the system know it is in the minus phase vs. the plus phase?
 
 We start with the following assumptions based on existing work:
 
@@ -35,21 +42,104 @@ If you just learn based on the continuous kinase signals in a fully continuous m
 
 ## Computational Issues: Average of Product vs. Product of Averages
 
-One of the most important computational differences for the kinase learning rule is that in Leabra and initially in Axon, the average activations were computed separately for sender and receiver, and then their product used for the CHL learning mechanism, whereas synaptic calcium directly reflects a product of sender and receiver activation, which is then averaged (i.e., an average of a product, vs. a product of averages).  In the rate-code based Leabra model, this did not matter too much because the neuron activations didn't change too much over the course of a trial.
+One of the most important computational features of the Kinase learning rule is that it should be based on a local synaptic calcium signal that reflects the interaction of both pre and postsynaptic factors, integrated over time, in a way that could reflect detailed spike timing relationships between these two neurons.  By contrast, in Leabra and initially in Axon, the average activations were computed separately for sender and receiver, and then their product used for the CHL learning mechanism (i.e., Kinase should use an average of a product, vs. a product of averages in CHL).  In the rate-code based Leabra model, this did not matter too much because the neuron activations didn't change too much over the course of a trial, and there was no detailed spike timing information in the first place.
 
 With discrete spiking, the *only* way to be sensitive to more detailed correlations in pre-post spiking activity is to compute the average of the products!  This entails significant computational cost in updating the average on a per-synapse, per-spike basis, but at least we should be able to do it per-spike and not every cycle, using the ISI values on Send and Recv neurons to optimize computation.
 
-This raises the second most important question: how to actually compute the synaptic calcium signal in the first place.  This requires making a simplified model of the allosteric NMDA receptor.
+# KinaseAMax Abstract model
 
-# Allosteric NMDA and resulting Ca flux
+See https://github.com/emer/axon/tree/master/examples/kinaseq for a parallel simulation examining this abstract formulation and how to efficiently implement it.
+
+The Leabra and initial Axon equations used cascading exponentially-updated running average variables on each neuron (recv and send) separately, with the final values multiplied for the CHL-like DWt function.  Here are the new names for these variables in the Kinase framework:
+
+* `CaM` = first level integration: `CaM += (g * Spike - CaM) / MTau` -- spike drives up toward a max per-spike amount with gain factor (g = 8 std).  The g multiplier gives a faster effective rate constant for going up vs. decay back down -- this just sets the overall scale of the values.  This represents an abstract version of Ca, and CaM (calmodulin) which is activated by calcium, as driven by influx from NMDA and VGCC receptors.  This is `AvgSS` in Leabra.
+
+* `CaP` = LTP, plus phase faster integration of CaM, reflecting CaMKII biologically.  Faster time constant makes this reflect the plus phase relative to the `CaD` LTD, minus-phase variable.  This is `AvgS` in Leabra.
+
+* `CaD` = LTD, minus phase slower integration of CaP (cascaded one further step), reflecting DAPK1 biologically.  This is `AvgM` in Leabra.
+
+The CHL product-based learning rule is a function of the difference between the plus-phase vs. minus-phase products of factors for S = Sender and R = Receiver:
+
+* `DWt = SCaP * RCaP - SCaD * RCaD`
+
+For the rate-code activations in Leabra, the product of these averages is likely to be similar to the average of the products at a synapse level, and computing neuron-level values is *much* faster computationally than integrating the products at the synapse level.  Indeed, experiments (a long time ago) showed no advantages to doing the synapse-level integration in Leabra.
+
+# KinaseB*: Working up by simplifying the Urakubo model
+
+To tackle the bottom-up approach toward deriving Kinase learning rules, we need to dramatically simplify the highly detailed Urakubo mechanisms into something that can be computed efficiently in large scale models.  This has turned out to be *much* simpler than originally estimated, with very simple exponential integration equations giving remarkably accurate approximations.  Furthermore, the critical synaptic Ca signal can be computed via an entirely factorized set of equations that depend separately on pre and post spiking, which is surprising.
+
+## Allosteric NMDA and resulting Ca flux
 
 ![NMDAo in Urakubo vs. Kinase](results/fig_kinase_nmdao_thetaerr_nrep3_isi01.png?raw=true "Urakubo 08 NMDAo vs. simple Kinase NMDAo computation.")
 
-First, the number of open NMDA channels is driven entirely by presynaptic spiking & glu release, with an inhibitory factor, which can be easily captured with simple exponential rate equations as show in above figure.
+First, the number of open NMDA channels is driven entirely by presynaptic spiking & Glu release, with an inhibitory factor, which can be very closely captured with simple exponential rate equations as shown in the above figure.  Given the significant complexity of the Urakubo allosteric NMDA model, it is remarkable how accurately a very simple model can capture it:
 
-![PSD_Ca in Urakubo vs. Kinase RCa](results/fig_kinase_rca_thetaerr_nrep3_isi01.png?raw=true "Urakubo 08 PSD_Ca vs. simple Kinase RCa computation.")
+```Go
+	ks.NMDAo -= ks.NMDAo / kp.DecayTau
+	ks.NMDAi -= ks.NMDAi / kp.InhibTau
+	if nex.PreSpike > 0 {
+		ks.NMDAo += (1 - ks.NMDAi) * (kp.PreOpen - ks.NMDAo)
+		ks.NMDAi += (1 - ks.NMDAi) * kp.PreInhib
+	}
+```
 
-However the resulting Ca levels are not particularly accurately captured as show in the above figure.
+![Kinase Ca vs. Urakubo, VGCC0](results/fig_kinase_kinca_thetaerr_nrep3_isi01_vgcc0.png?raw=true "Kinase computed Ca vs. Urakubo 08, VGCC=0")
+
+The presynaptically-driven NMDAo value can be combined with the standard voltage-gated dependency of the postsynaptic side (Mg blockage), to compute a net Ca value at each point in time, as shown in the above figure, which also fits the full Urakubo value (`PSD_Ca` = postsynaptic density Ca) very well.  The Vdrive factor is also important for this close fit -- this multiplies the Ca value by the same exponential function of voltage used in computing the VGCC conductance.
+
+```Go
+	ks.Ca = kp.CaGain * ks.NMDAo * nex.NMDAGmg
+	if kp.CaVdrive {
+		ks.Ca *= kp.Vdrive(chans.VToBio(vmd))
+	}
+	ks.Ca += kp.VGCCGain * nex.Gvgcc
+```
+
+![Kinase Ca vs. Urakubo, VGCC12](results/fig_kinase_kinca_thetaerr_nrep3_isi01_vgcc12.png?raw=true "Kinase computed Ca vs. Urakubo 08, VGCC=.12")
+
+The previous figure shows the case where the VGCC currents are off, while the above one shows GBar for VGCC = .12, which is that replicates the Urakubo results.  A `VGCCCGain` of 20 provides a good fit to the overall resulting Ca spikes.
+
+Thus, the bottom line is that a realistic synaptic Ca level can be computed *at any point* based on a presynaptically-driven `NMDAo` variable, and postsynaptically-driven `NMDAmg`, `Vdrive`, and `VGCC` factors.
+
+## CaMKIIact from Ca
+
+![Kinase CaP vs. Urakubo CaMKII](results/fig_kinase_cap_camkii_thetaerr_nrep1_isi08.png?raw=true "Kinase CaP vs. Urakubo 08")
+
+The above figure shows that the response of CaMKIIact (activated CaMKII, in the PSD) can be accurately approximated via a simple cascaded exponential integration function of the form used in the existing Leabra and Axon models as described above.  Specifically, the CaP value shown in the plot is integrated with a `SpikeG = 90`, `MTau = 40`, and `PTau = 1200` (using `SynNMDACa` which just applies the cascaded integration dynamics to the raw `PSD_Ca` signal).
+
+The `MTau = 40` value which effectively tracks the rise time of the curve is identical to that used in existing Axon models, except it is used for PTau, on top of an initial `MTau = 10` that roughly approximates the time dynamics of the Ca signal, based on raw input spiking.  Thus, overall, there is a good match for the rise time dynamics of this integration of CaMKII to the abstract model, which does effective error-driven learning at the 200 msec Theta timescale.
+
+However, the decay time constant is dominated by the `PTau = 1200` and it is *much* longer than what is used in the model.  However, biologically, this likely reflects the fact that CaMKII persists in the N2B binding state to drive further steps of the plasticity process, and the most relevant factor here is the rise dynamics, and, really, the detailed relationship with DAPK1, as it is only the relative strength of these two that determines the direction of weight change.
+
+In short, as with the earlier steps, it is remarkably straightforward to capture the dynamics of CaMKII integrating directly from the Ca influx signal, through the same cascaded exponential integration functions used in our effective computational models, even with the same relevant time dynamics.
+
+All of this means that we can bridge directly to more abstract, computationally efficient formulations, which is important given the relative uncertainty about how DAPK1 actually works at the detailed biochemical level, and about how it interacts with CaMKII to drive DWt.  
+
+Because we have concrete data from the Zito lab experiment confirming the theta window CHL-like learning dynamics, we know what the net result of the biochemistry is, and we have abstract models that capture it, so this greatly constraints from the "top-down" the exploration for how DAPK1 should behave.
+
+## The VmDend wildcard
+
+Despite all the positive developments above, there is a major unresolved issue in terms of understanding the actual behavior of the `Vm` membrane potential in the spine, which then significantly affects the postsynaptic NMDA and VGCC conductances.
+
+TODO: explain and deal with this.  Issue is NMDA (and GABAB) for bistability vs. learning.
+
+First step: just use Vm instead of VmDend (with a flag), and see how that does using full bio abstracted Ca signals per above.
+
+## KinaseB1: SynNMDACa
+
+The above approximations are all implemented efficiently through separate pre and postsynaptic variables, that are multiplied at the synaptic level to generate an accurate reflection of the synaptic Ca signal as would be given in the Urakubo model.  The `SynNMDACa` learning rule (aka KinaseB1) then simply runs the cascading integrators for CaP and CaD on top of this Ca signal, to get a learning rule.  Note that the first stage CaM signal is intended to capture Ca itself, so the time constant of integration for this level should be 1, when using this biologically-based Ca signal.
+
+TODO: CaM = 1, Vm instead of VmDend!
+
+# KinaseAMax behavior
+
+## SynSpkCaOR
+
+The following plots show the behavior of the most abstract `SynSpkCaOR` synaptic version of the Kinase algorithm, in capturing Ca values as represented by the CaM first-stage integration over discrete pre- post spikes.
+
+This rule simply says that there is a "synaptic" spike impulse whenever *either* the pre or post: `SynSpk = SSpk || RSpk` -- either spike counts, but there is no specific interaction -- this is the least product-like.  This SynSpk value then drives the same cascade of time integrations, as usual, with the first CaM stage with a Tau of 10 serving to give a reasonable approximation of the biological Ca as computed above:
+
+![Kinase Ca vs. Urakubo, VGCC12](results/fig_kinase_kinca_thetaerr_nrep3_isi01_vgcc12.png?raw=true "Kinase computed Ca vs. Urakubo 08, VGCC=.12")
 
 ![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
 
@@ -59,14 +149,9 @@ However the resulting Ca levels are not particularly accurately captured as show
 
 ![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom3.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
 
-The above figures show that a very simple "OR" spike-driven Ca integration rule can *sort of* capture the complex allosteric dynamics from Urakubo.  The OR rule says that either a pre OR post spike drives an influx of Ca up to a max Ca driving level.  The CaM Tau = 15 here, with ThetaErr windows at 50 then 25 hz, repeated 3x with .1 sec ISI intervals.
+The above figures show that a very simple "OR" spike-driven Ca integration rule can *sort of* capture the complex allosteric dynamics from Urakubo.  The OR rule says that either a pre OR post spike drives an influx of Ca up to a max Ca driving level.  The CaM Tau = 10 here, with ThetaErr windows at 50 then 25 hz, repeated 3x with .1 sec ISI intervals.
 
-
-
-
-
-
-# KinaseAMax
+## RA25, Objrec, LVis sim results
 
 This is the most abstract, pragmatic starting model, using same SS, S, M cascading running-average computation on top of synaptic Ca computed directly from NMDA channels and VmDend, etc (same as used for driving good activation dynamics).  Learning automatically happens at end of ThetaCycle.
 

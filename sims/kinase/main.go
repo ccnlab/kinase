@@ -136,6 +136,7 @@ type Sim struct {
 	Stim         Stims                    `desc:"what stimulation to drive with"`
 	KinaseLearn  bool                     `desc:"plot kinase-based learning outcome -- otherwise Urakubo"`
 	KinaseOnly   bool                     `desc:"only run the kinase algorithm, not the detailed biophysical Urakobo-based model"`
+	DendVm       bool                     `desc:"use DendVm for NMDA, VGCC channels"`
 	ISISec       float64                  `desc:"inter-stimulus-interval in seconds -- between reps"`
 	NReps        int                      `desc:"number of repetitions -- takes 100 to produce classic STDP"`
 	FinalSecs    float64                  `def:"20,50,100" desc:"number of seconds to run after the manipulation -- results are strongest after 100, decaying somewhat after that point -- 20 shows similar qualitative results but weaker, 50 is pretty close to 100 -- less than 20 not recommended."`
@@ -146,6 +147,7 @@ type Sim struct {
 	DeltaT       int                      `desc:"in msec, difference of Tpost - Tpre == pos = LTP, neg = LTD STDP"`
 	DeltaTRange  int                      `desc:"range for sweep of DeltaT -- actual range is - to +"`
 	DeltaTInc    int                      `desc:"increment for sweep of DeltaT"`
+	STDPLrnOff   int                      `desc:"learn now offset for STDP paradigm"`
 	RGClamp      bool                     `desc:"use Ge current clamping instead of distrete pulsing for firing rate-based manips, e.g., ThetaErr"`
 	Opts         SimOpts                  `view:"inline" desc:"global simulation options controlling major differences in behavior"`
 	GluN2BN      float64                  `desc:"total initial amount of GluN2B"`
@@ -153,7 +155,6 @@ type Sim struct {
 	DAPK1_AMPAR  float64                  `desc:"strength of AMPAR inhibitory effect from DAPK1"`
 	DAPK1lrate   float64                  `desc:"multiplier for diff between DAPK1 and CaMKII"`
 	CaNDAPK1     float64                  `desc:"Km for the CaM dephosphorylation of DAPK1"`
-	VmDend       bool                     `desc:"use dendritic Vm signal for driving spine channels"`
 	NMDAAxon     bool                     `desc:"use the Axon NMDA channel instead of the allosteric Kinase one"`
 	NMDAGbar     float32                  `def:"0,0.15" desc:"strength of NMDA current -- 0.15 default for posterior cortex"`
 	GABABGbar    float32                  `def:"0,0.2" desc:"strength of GABAB current -- 0.2 default for posterior cortex"`
@@ -191,7 +192,7 @@ func (ss *Sim) New() {
 	ss.Params = ParamSets
 	ss.Stim = ThetaErr
 	ss.KinaseLearn = true
-	ss.ISISec = 0.8
+	ss.ISISec = 0.1
 	ss.NReps = 1
 	ss.FinalSecs = 0
 	ss.DurMsec = 200
@@ -200,7 +201,8 @@ func (ss *Sim) New() {
 	ss.DeltaT = 16
 	ss.DeltaTRange = 50
 	ss.DeltaTInc = 5
-	ss.RGClamp = true
+	ss.STDPLrnOff = 50
+	ss.RGClamp = false
 	ss.Defaults()
 }
 
@@ -218,7 +220,7 @@ func (ss *Sim) Defaults() {
 	ss.NMDAGbar = 0.15 // 0.1 to 0.15 matches pre-spike increase in vm
 	ss.GABABGbar = 0.0 // 0.2
 	ss.VGCC.Defaults()
-	ss.VGCC.Gbar = 0.0 // 0.12 matches vgcc jca
+	ss.VGCC.Gbar = 0.12 // 0.12 matches vgcc jca
 	ss.AK.Defaults()
 	ss.AK.Gbar = 0 // todo: figure this out!
 	ss.CaTarg.Cyt = 10
@@ -416,17 +418,27 @@ func (ss *Sim) NeuronUpdt(msec int, ge, gi float32, prespike bool) {
 	nrn.Ge = nrn.GeSyn
 	nrn.Gi = gi
 	ly.Act.NMDAFmRaw(nrn, 0)
-	nex.NMDAGmg = ly.Act.NMDA.MgGFmV(nrn.VmDend)
-	nrn.GABAB, nrn.GABABx = ly.Act.GABAB.GABAB(nrn.GABAB, nrn.GABABx, nrn.Gi)
-	nrn.GgabaB = ly.Act.GABAB.GgabaB(nrn.GABAB, nrn.VmDend)
 
-	nex.Gvgcc = ss.VGCC.Gvgcc(nrn.VmDend, nex.VGCCm, nex.VGCCh)
-	dm, dh := ss.VGCC.DMHFmV(nrn.VmDend, nex.VGCCm, nex.VGCCh)
+	vmd := nrn.Vm
+	if ss.DendVm {
+		vmd = nrn.VmDend
+	}
+
+	nex.NMDAGmg = ly.Act.NMDA.MgGFmV(vmd)
+	nrn.GABAB, nrn.GABABx = ly.Act.GABAB.GABAB(nrn.GABAB, nrn.GABABx, nrn.Gi)
+	nrn.GgabaB = ly.Act.GABAB.GgabaB(nrn.GABAB, vmd)
+
+	nex.Gvgcc = ss.VGCC.Gvgcc(vmd, nex.VGCCm, nex.VGCCh)
+	dm, dh := ss.VGCC.DMHFmV(vmd, nex.VGCCm, nex.VGCCh)
 	nex.VGCCm += dm
 	nex.VGCCh += dh
+	isi := nrn.ISI
+	if isi >= ly.Act.Spike.VmR-1 && isi <= ly.Act.Spike.VmR {
+		nex.VGCCm = 0 // resets
+	}
 
 	nex.Gak = ss.AK.Gak(nex.AKm, nex.AKh)
-	dm, dh = ss.AK.DMHFmV(nrn.VmDend, nex.AKm, nex.AKh)
+	dm, dh = ss.AK.DMHFmV(vmd, nex.AKm, nex.AKh)
 	nex.AKm += dm
 	nex.AKh += dh
 
@@ -452,11 +464,11 @@ func (ss *Sim) NeuronUpdt(msec int, ge, gi float32, prespike bool) {
 	ss.Spine.Ca.SetInject(float64(nex.VGCCJcaPSD), float64(nex.VGCCJcaCyt))
 	ss.Spine.States.PreSpike = float64(nex.PreSpike)
 
-	ss.KinaseParams.Step(&ss.KinaseSyn, ss.Neuron, &ss.NeuronEx, float32(ss.Spine.States.CaSig.Ca.PSD))
-
 	if !ss.KinaseOnly {
 		ss.Spine.StepTime(0.001)
 	}
+
+	ss.KinaseParams.Step(&ss.KinaseSyn, ss.Neuron, &ss.NeuronEx, float32(chem.CoFmN(ss.Spine.States.CaSig.Ca.PSD, PSDVol)))
 }
 
 // LogDefault does default logging for current Msec
@@ -623,7 +635,7 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.SetColParams("Time", eplot.Off, eplot.FloatMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Ge", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 1)
 	plt.SetColParams("Inet", eplot.Off, eplot.FixMin, -.2, eplot.FixMax, 1)
-	plt.SetColParams("Vm", eplot.On, eplot.FixMin, 0, eplot.FixMax, 1)
+	plt.SetColParams("Vm", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 1)
 	plt.SetColParams("Act", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 1)
 	plt.SetColParams("Spike", eplot.On, eplot.FixMin, 0, eplot.FixMax, 1)
 	plt.SetColParams("Gk", eplot.Off, eplot.FixMin, 0, eplot.FixMax, 1)
@@ -649,7 +661,7 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 
 	plt.SetColParams("VmS", eplot.Off, eplot.FixMin, -70, eplot.FloatMax, 1)
 	plt.SetColParams("PreSpike", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_Ca", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("PSD_Ca", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_CaMact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 
 	plt.SetColParams("Ca", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 2)

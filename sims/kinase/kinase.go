@@ -79,8 +79,10 @@ func (ks *KinaseState) Log(dt *etable.Table, row int) {
 	dt.SetCellFloat("SCaM", row, float64(ks.CaM))
 	dt.SetCellFloat("SCaP", row, float64(ks.CaP))
 	dt.SetCellFloat("SCaD", row, float64(ks.CaD))
-	dt.SetCellFloat("Wt", row, float64(ks.Wt))
-	dt.SetCellFloat("DWt", row, float64(ks.DWt))
+	if TheSim.KinaseLearn {
+		dt.SetCellFloat("Wt", row, float64(ks.Wt))
+		dt.SetCellFloat("DWt", row, float64(ks.DWt))
+	}
 }
 
 func (ks *KinaseState) ConfigLog(sch *etable.Schema) {
@@ -131,7 +133,8 @@ func (kr *KinaseRates) Step(s, cam float32) float32 {
 // Targets the NMDAo Nopen number of open NMDA channels
 type KinaseNMDA struct {
 	CaGain   float32 `def:"2,5.5,300" desc:"overall Ca Gain factor: 2 for normalized with CaVdrive, 5.5 for CaVdrive, 300 without"`
-	PreOpen  float32 `def:"0.25" desc:"driver max in number open from presynaptic firing"`
+	VGCCGain float32 `desc:"gain on Gvgcc for Ca influx"`
+	PreOpen  float32 `def:"0.2" desc:"driver max in number open from presynaptic firing"`
 	PreInhib float32 `def:"1" desc:"increment in inhibition from presynaptic firing"`
 	DecayTau float32 `def:"30" desc:"conductance decay time constant"`
 	InhibTau float32 `def:"100" desc:"presynaptic inhibition decay time constant"`
@@ -140,7 +143,8 @@ type KinaseNMDA struct {
 
 func (kp *KinaseNMDA) Defaults() {
 	kp.CaGain = 2 // 5.5 // 300
-	kp.PreOpen = 0.25
+	kp.VGCCGain = 10
+	kp.PreOpen = 0.2
 	kp.PreInhib = 1
 	kp.DecayTau = 30
 	kp.InhibTau = 100
@@ -157,6 +161,10 @@ func (kp *KinaseNMDA) Vdrive(vbio float32) float32 {
 }
 
 func (kp *KinaseNMDA) Step(ks *KinaseState, nrn *axon.Neuron, nex *NeuronEx) {
+	vmd := nrn.Vm
+	if TheSim.DendVm {
+		vmd = nrn.VmDend
+	}
 	ks.NMDAo -= ks.NMDAo / kp.DecayTau
 	ks.NMDAi -= ks.NMDAi / kp.InhibTau
 	if nex.PreSpike > 0 {
@@ -165,8 +173,9 @@ func (kp *KinaseNMDA) Step(ks *KinaseState, nrn *axon.Neuron, nex *NeuronEx) {
 	}
 	ks.Ca = kp.CaGain * ks.NMDAo * nex.NMDAGmg
 	if kp.CaVdrive {
-		ks.Ca *= kp.Vdrive(chans.VToBio(nrn.VmDend))
+		ks.Ca *= kp.Vdrive(chans.VToBio(vmd))
 	}
+	ks.Ca += kp.VGCCGain * nex.Gvgcc
 }
 
 // KinaseRules are different options for Kinase-based learning rules
@@ -192,6 +201,13 @@ const (
 	// Basically a synapse version of original learning rule.
 	SynSpkCaOR
 
+	// SynSpkNMDAOR uses synapse-level spike-driven calcium signals
+	// with an OR rule for pre OR post spiking driving the CaM up,
+	// with NMDAo multiplying the spike drive to fit Bio Ca better
+	// including the Bonus factor.
+	// which is then integrated at P vs. D time scales.
+	SynSpkNMDAOR
+
 	// SynNMDACa uses synapse-level NMDA-driven calcium signals
 	// (which can be either Urakubo allosteric or Kinase abstract)
 	// integrated at P vs. D time scales -- abstract version
@@ -210,12 +226,13 @@ const (
 // Cyc:25, SS:20, S:4, M:20
 type KinaseSynParams struct {
 	Rule    KinaseRules `desc:"which learning rule to use"`
-	SpikeG  float32     `desc:"spiking gain for Spk rules"`
+	SpikeG  float32     `def:"20,8,200" desc:"spiking gain for Spk rules"`
+	SBonus  float32     `def:"500" desc:"increment in spike impact as function of sender activity"`
 	SAvgThr float32     `def:"0.02" desc:"optimization for compute speed -- threshold on sending avg values to update Ca values -- depends on Ca clearing upon Wt update"`
-	MTau    float32     `def:"40" min:"1" desc:"CaM mean running-average time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life). This provides a pre-integration step before integrating into the CaP short time scale"`
-	PTau    float32     `def:"10" min:"1" desc:"LTP Ca-driven factor time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life). Continuously updates based on current CaI value, resulting in faster tracking of plus-phase signals."`
+	MTau    float32     `def:"10,40" min:"1" desc:"CaM mean running-average time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life). This provides a pre-integration step before integrating into the CaP short time scale"`
+	PTau    float32     `def:"40,10" min:"1" desc:"LTP Ca-driven factor time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life). Continuously updates based on current CaI value, resulting in faster tracking of plus-phase signals."`
 	DTau    float32     `def:"40" min:"1" desc:"LTD Ca-driven factor time constant in cycles, which should be milliseconds typically (tau is roughly how long it takes for value to change significantly -- 1.4x the half-life).  Continuously updates based on current CaP value, resulting in slower integration that still reflects earlier minus-phase signals."`
-	DScale  float32     `def:"0.93" desc:"scaling factor on CaD as it enters into the learning rule, to compensate for systematic decrease in activity over the course of a theta cycle"`
+	DScale  float32     `def:"1.05" desc:"scaling factor on CaD as it enters into the learning rule, to compensate for systematic decrease in activity over the course of a theta cycle"`
 
 	MDt float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"rate = 1 / tau"`
 	PDt float32 `view:"-" json:"-" xml:"-" inactive:"+" desc:"rate = 1 / tau"`
@@ -230,12 +247,13 @@ func (kp *KinaseSynParams) Update() {
 
 func (kp *KinaseSynParams) Defaults() {
 	kp.Rule = SynSpkCaOR
-	kp.SpikeG = 8
+	kp.SpikeG = 8 // 200 // 8
+	kp.SBonus = 500
 	kp.SAvgThr = 0.02
-	kp.MTau = 40
-	kp.PTau = 10
+	kp.MTau = 10 // 40
+	kp.PTau = 40 // 10
 	kp.DTau = 40
-	kp.DScale = 0.93
+	kp.DScale = 1.05
 	kp.Update()
 }
 
@@ -270,7 +288,7 @@ func (kp *KinaseParams) Defaults() {
 	kp.SynCa.Defaults()
 	kp.Drate.Set(1.6, 0.7) // 1.6, 0.7
 	kp.Prate.Set(1.8, 0.8) // matches CaMKII
-	kp.Lrate = 0.2
+	kp.Lrate = 0.02
 }
 
 // Step updates current state from params
@@ -291,12 +309,24 @@ func (kp *KinaseParams) Step(c *KinaseState, nrn *axon.Neuron, nex *NeuronEx, ca
 			spk = kp.SynCa.SpikeG
 		}
 		kp.SynCa.FmCa(spk, &c.CaM, &c.CaP, &c.CaD)
+	case SynSpkNMDAOR:
+		spk := float32(0)
+		if nrn.Spike > 0 || nex.PreSpike > 0 {
+			spk = kp.SynCa.SpikeG
+			if nrn.Spike > 0 && nex.PreISI > 0 {
+				spk += kp.SynCa.SBonus * c.NMDAo
+			}
+			spk *= c.NMDAo
+		}
+		kp.SynCa.FmCa(spk, &c.CaM, &c.CaP, &c.CaD)
 	case SynNMDACa:
-		kp.SynCa.FmCa(ca, &c.CaM, &c.CaP, &c.CaD)
+		c.CaM += kp.SynCa.MDt * (kp.SynCa.SpikeG*ca - c.CaM)
+		c.CaP += kp.SynCa.PDt * (c.CaM - c.CaP)
+		c.CaD += kp.SynCa.DDt * (c.CaP - c.CaD)
 	}
 
 	if nex.LearnNow == 0 {
-		c.DWt = kp.Lrate * (c.CaP - c.CaD) // todo: xcal
+		c.DWt = kp.Lrate * kp.SynCa.DWt(c.CaP, c.CaD) // todo: xcal
 		c.Wt += c.DWt
 	}
 	if nex.LearnNow >= 0 {
