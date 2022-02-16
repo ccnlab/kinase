@@ -149,6 +149,8 @@ TODO: CaM = 1, Vm instead of VmDend!  Definitely try VGCC!
 
 TODO: redo thetaerr sweep results!
 
+TODO: kinca VGCC rgclamp works!!a
+
 
 # KinaseAMax behavior
 
