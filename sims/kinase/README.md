@@ -131,25 +131,27 @@ The above approximations are all implemented efficiently through separate pre an
 
 ![SynNMDACa PSD_Ca thetaerr learning](results/fig_kinase_synnmdaca_thetaerr_nrep100_isi08_psdca.png?raw=true "SynNMDACa learning behavior, driven by PSD_Ca, in ThetaErrSweep @ 100 reps, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 1.")
 
-The above figure shows overall error-driven learning behavior of the SynNMDACa version on the ThetaErrSweep case with NRep = 100, ISISec = 0.8, VGCC Gbar = .12, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 1, Lrate = 0.02.  It is not perfectly error-driven, but reasonably so.
+The above figure shows overall error-driven learning behavior of the SynNMDACa version, using the full Urakubo `PSD_Ca` calcium signal, on the ThetaErrSweep case with NRep = 100, ISISec = 0.8, VGCC Gbar = .12, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 1, Lrate = 0.02.  It shows significant deviations from the error-driven ordering in the 50-25 and 25-50 cases, and the 100-50 is not very different from the no-error cases -- below we see that much of this is due to the VGCC dynamics.
+
+![SynNMDACa KinCa thetaerr learning](results/fig_kinase_synnmdaca_thetaerr_nrep100_isi08_kinca.png?raw=true "SynNMDACa learning behavior, driven by Kinase Ca, in ThetaErrSweep @ 100 reps, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 0.93.")
+
+The above figure shows the comparable case using kinase-based Ca instead of full Urakubo, with VGCC = 0.12 -- note that it does differ significantly, in particular in the err LTD cases, suggesting that the Ca approximation, though good, needs a bit more tuning.
 
 ![SynNMDACa PSD_Ca VGCC = 0, thetaerr learning](results/fig_kinase_synnmdaca_thetaerr_nrep100_isi08_psdca_vgcc0.png?raw=true "SynNMDACa learning behavior, driven by PSD_Ca, with no VGCC, in ThetaErrSweep @ 100 reps, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 1.")
 
 Above figure shows same configuration but VGCC Gbar = 0, with DScale = 0.93 to balance weight changes.  It is a bit different, but not radically so.  Note that PTau = 10 (MTau = 1, DTau = 40) does not produce systematic error-driven learning pattern -- 10 for Ca and 40 for PTau seems better..
 
-![SynNMDACa KinCa thetaerr learning](results/fig_kinase_synnmdaca_thetaerr_nrep100_isi08_kinca.png?raw=true "SynNMDACa learning behavior, driven by Kinase Ca, in ThetaErrSweep @ 100 reps, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 0.93.")
-
-The above figure shows case using kinase-based Ca instead of full Urakubo, with VGCC = 0.12 -- note that it does differ significantly, in particular in the err LTD cases, suggesting that the Ca approximation, though good, needs a bit more tuning.
-
 ![SynNMDACa KinCa VGCC = 0 thetaerr learning](results/fig_kinase_synnmdaca_thetaerr_nrep100_isi08_kinca_vgcc0.png?raw=true "SynNMDACa learning behavior, driven by Kinase Ca, with no VGCC, in ThetaErrSweep @ 100 reps, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 0.93.")
 
 Finally, above figure shows KinaseCa version with VGCC=0 -- even worse.
+
+TODO: Ca transients may be part of the issue?
 
 TODO: CaM = 1, Vm instead of VmDend!  Definitely try VGCC!
 
 TODO: redo thetaerr sweep results!
 
-TODO: kinca VGCC rgclamp works!!a
+TODO: kinca VGCC rgclamp looks a lot better -- compare on raw Ca values.
 
 
 # KinaseAMax behavior
