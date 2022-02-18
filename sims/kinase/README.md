@@ -186,6 +186,9 @@ The above figure shows the overall error-driven learning dynamics -- strongly er
 
 The original "product of averages" `NeurSpkCa` learning rule produces an overall error-driven function as shown above, but the LTD is generally weaker and there is overall higher variability as shown in the [kinaseq](https://github.com/emer/axon/tree/master/examples/kinaseq) analysis.
 
+![NMDA / Ca vs. NeurSpkCa](results/fig_kinase_neurspkca_thetaerr_nrep1_isi01.png?raw=true "Urakubo 08 PSD Ca vs. NeurSpkCa separate send, recv integration -- does not capture much of the actual synaptic-level dynamics")
+
+Further, the above plot shows the comparison against the Urakubo PSD_Ca signal for this `NeurSpkCa` case -- it is very far off from capturing the detailed Ca dynamics.
 
 ## RA25, Objrec, LVis sim results
 
