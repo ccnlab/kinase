@@ -135,11 +135,13 @@ The above figure shows overall error-driven learning behavior of the SynNMDACa v
 
 ![SynNMDACa KinCa thetaerr learning](results/fig_kinase_synnmdaca_thetaerr_nrep100_isi08_kinca.png?raw=true "SynNMDACa learning behavior, driven by Kinase Ca, in ThetaErrSweep @ 100 reps, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 0.93.")
 
-The above figure shows the comparable case using kinase-based Ca instead of full Urakubo, with VGCC = 0.12 -- note that it does differ significantly, in particular in the err LTD cases, suggesting that the Ca approximation, though good, needs a bit more tuning.
+The above figure shows the comparable case using kinase-based Ca instead of full Urakubo, with VGCC = 0.12.  It is qualitatively similar to the Urakubo case, but the key LTD cases have just slightly less LTD.
 
 ![SynNMDACa PSD_Ca VGCC = 0, thetaerr learning](results/fig_kinase_synnmdaca_thetaerr_nrep100_isi08_psdca_vgcc0.png?raw=true "SynNMDACa learning behavior, driven by PSD_Ca, with no VGCC, in ThetaErrSweep @ 100 reps, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 1.")
 
-Above figure shows same configuration but VGCC Gbar = 0, with DScale = 0.93 to balance weight changes.  It is a bit different, but not radically so.  Note that PTau = 10 (MTau = 1, DTau = 40) does not produce systematic error-driven learning pattern -- 10 for Ca and 40 for PTau seems better..
+Above figure shows same configuration but VGCC Gbar = 0, with DScale = 0.93 to balance weight changes, which fixes some of the nonmonotonicities.
+
+Also PTau = 10 (MTau = 1, DTau = 40) does not produce systematic error-driven learning pattern (not shown) -- 10 for Ca and 40 for PTau seems better..
 
 ![SynNMDACa KinCa VGCC = 0 thetaerr learning](results/fig_kinase_synnmdaca_thetaerr_nrep100_isi08_kinca_vgcc0.png?raw=true "SynNMDACa learning behavior, driven by Kinase Ca, with no VGCC, in ThetaErrSweep @ 100 reps, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 0.93.")
 
@@ -156,23 +158,34 @@ TODO: kinca VGCC rgclamp looks a lot better -- compare on raw Ca values.
 
 # KinaseAMax behavior
 
-## SynSpkCaOR
+## SynSpkCa
 
-The following plots show the behavior of the most abstract `SynSpkCaOR` synaptic version of the Kinase algorithm, in capturing Ca values as represented by the CaM first-stage integration over discrete pre- post spikes.
+See [kinaseq](https://github.com/emer/axon/tree/master/examples/kinaseq) model for more discussion and analysis of the `SynSpkCa` learning rule relative to the `NeurSpkCa` abstract case.
 
-This rule simply says that there is a "synaptic" spike impulse whenever *either* the pre or post: `SynSpk = SSpk || RSpk` -- either spike counts, but there is no specific interaction -- this is the least product-like.  This SynSpk value then drives the same cascade of time integrations, as usual, with the first CaM stage with a Tau of 10 serving to give a reasonable approximation of the biological Ca as computed above:
+The following plots show the behavior of the most abstract `SynSpkCa` synaptic version of the Kinase algorithm, in capturing Ca values as represented by the CaM first-stage integration over discrete pre- post spikes.
 
-![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
+This rule simply says that there is a "synaptic" spike impulse whenever *either* the pre or post: `SynSpk = SSpk || RSpk` -- either spike counts, but there is no specific interaction.  This SynSpk value then drives the same cascade of time integrations, as usual, with the first CaM stage with a Tau of 10 serving to give a reasonable approximation of the biological Ca as computed above:
 
-![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
+![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_thetaerr_nrep3_isi01.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
 
-![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom2.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
+![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_thetaerr_nrep3_isi01_zoom.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
 
-![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_or_thetaerr_nrep3_isi01_zoom3.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
+![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_thetaerr_nrep3_isi01_zoom2.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
+
+![NMDA / Ca vs. OR rule](results/fig_kinase_synspkca_thetaerr_nrep3_isi01_zoom3.png?raw=true "Urakubo 08 PSD Ca vs. simple OR model of pre-post spike intergration in CaM signal.")
 
 The above figures show that a very simple "OR" spike-driven Ca integration rule can *sort of* capture the complex allosteric dynamics from Urakubo.  The OR rule says that either a pre OR post spike drives an influx of Ca up to a max Ca driving level.  The CaM Tau = 10 here, with ThetaErr windows at 50 then 25 hz, repeated 3x with .1 sec ISI intervals.
 
-TODO: point to thetaerr sweep results!
+![ThetaErr sweep for SynSpkCa](results/fig_kinase_synspkca_thetaerr_nrep100_isi08_m10p40ds105.png?raw=true "SynSpkCa ThetaErr learning profile for standard sweep (100 reps, MTau=10, PTau=40, DTau=40, DScale = 1.05.")
+
+The above figure shows the overall error-driven learning dynamics -- strongly error-driven, but with some interesting, reliable "kinks" in 100-50 and 50-100 relative to the 25-100 and 100-25 cases.
+
+## NeurSpkCa 
+
+![ThetaErr sweep for NeurSpkCa](results/fig_kinase_neurspkca_thetaerr_nrep100_isi08_m10p40ds105.png?raw=true "NeurSpkCa ThetaErr learning profile for standard sweep (100 reps, MTau=10, PTau=40, DTau=40, DScale = 1.05.")
+
+The original "product of averages" `NeurSpkCa` learning rule produces an overall error-driven function as shown above, but the LTD is generally weaker and there is overall higher variability as shown in the [kinaseq](https://github.com/emer/axon/tree/master/examples/kinaseq) analysis.
+
 
 ## RA25, Objrec, LVis sim results
 

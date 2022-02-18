@@ -20,22 +20,19 @@ type KinaseState struct {
 	Ca    float32 `desc:"Computed Ca level"`
 	Ds    float32 `desc:"LTD-driving DAPK1-based time integrator state"`
 	Ps    float32 `desc:"LTP-driving CaMKII-based time integrator state"`
-	CaM   float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
-	CaP   float32 `desc:"short time-scale average of spiking, as a running average over CaM -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see CaPLrn)"`
-	CaD   float32 `desc:"medium time-scale average of spiking, as a running average over CaP -- represents the minus phase for error-driven learning"`
-	RCaM  float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
-	RCaP  float32 `desc:"short time-scale average of spiking, as a running average over CaM -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see CaPLrn)"`
-	RCaD  float32 `desc:"medium time-scale average of spiking, as a running average over CaP -- represents the minus phase for error-driven learning"`
-	SCa   float32 `desc:"Computed Ca level - send"`
-	SCaM  float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
-	SCaP  float32 `desc:"short time-scale average of spiking, as a running average over CaM -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see CaPLrn)"`
-	SCaD  float32 `desc:"medium time-scale average of spiking, as a running average over CaP -- represents the minus phase for error-driven learning"`
-	RSCa  float32 `desc:"Computed Ca level - send"`
-	RSCaM float32 `desc:"super-short time-scale average of spiking -- goes up instantaneously when a Spike occurs, and then decays until the next spike -- provides the lowest-level time integration for running-averages that simulate accumulation of Calcium over time"`
-	RSCaP float32 `desc:"short time-scale average of spiking, as a running average over CaM -- tracks the most recent activation states, and represents the plus phase for learning in error-driven learning (see CaPLrn)"`
-	RSCaD float32 `desc:"medium time-scale average of spiking, as a running average over CaP -- represents the minus phase for error-driven learning"`
-	Wt    float32 `desc:"simulated weight"`
-	DWt   float32 `desc:"change in weight"`
+	CaM   float32 `desc:"Synaptic: first stage running average (mean) Ca calcium level (like CaM = calmodulin), feeds into CaP, for Kinase based learning"`
+	CaP   float32 `desc:"Synaptic: shorter timescale integrated CaM value, representing the plus, LTP direction of weight change and capturing the function of CaMKII in the Kinase learning rule"`
+	CaD   float32 `desc:"Synaptic: longer timescale integrated CaP value, representing the minus, LTD direction of weight change and capturing the function of DAPK1 in the Kinase learning rule"`
+	RCaM  float32 `desc:"Recv: first stage running average (mean) Ca calcium level (like CaM = calmodulin), feeds into CaP, for Kinase based learning"`
+	RCaP  float32 `desc:"Recv: shorter timescale integrated CaM value, representing the plus, LTP direction of weight change and capturing the function of CaMKII in the Kinase learning rule"`
+	RCaD  float32 `desc:"Recv: longer timescale integrated CaP value, representing the minus, LTD direction of weight change and capturing the function of DAPK1 in the Kinase learning rule"`
+	SCa   float32 `desc:"Computed Ca level - sending neuron"`
+	SCaM  float32 `desc:"Sender: first stage running average (mean) Ca calcium level (like CaM = calmodulin), feeds into CaP, for Kinase based learning"`
+	SCaP  float32 `desc:"Sender: shorter timescale integrated CaM value, representing the plus, LTP direction of weight change and capturing the function of CaMKII in the Kinase learning rule"`
+	SCaD  float32 `desc:"Sender: longer timescale integrated CaP value, representing the minus, LTD direction of weight change and capturing the function of DAPK1 in the Kinase learning rule"`
+
+	Wt  float32 `desc:"simulated weight"`
+	DWt float32 `desc:"change in weight"`
 }
 
 func (ks *KinaseState) Init() {
@@ -195,18 +192,18 @@ const (
 	// Leabra and Axon XCAL / CHL learning rule.
 	NeurSpkCa KinaseRules = iota
 
-	// SynSpkCaOR uses synapse-level spike-driven calcium signals
+	// SynSpkCa uses synapse-level spike-driven calcium signals
 	// with an OR rule for pre OR post spiking driving the CaM up,
 	// which is then integrated at P vs. D time scales.
 	// Basically a synapse version of original learning rule.
-	SynSpkCaOR
+	SynSpkCa
 
-	// SynSpkNMDAOR uses synapse-level spike-driven calcium signals
+	// SynSpkNMDA uses synapse-level spike-driven calcium signals
 	// with an OR rule for pre OR post spiking driving the CaM up,
 	// with NMDAo multiplying the spike drive to fit Bio Ca better
 	// including the Bonus factor.
 	// which is then integrated at P vs. D time scales.
-	SynSpkNMDAOR
+	SynSpkNMDA
 
 	// SynNMDACa uses synapse-level NMDA-driven calcium signals
 	// (which can be either Urakubo allosteric or Kinase abstract)
@@ -219,11 +216,7 @@ const (
 
 // KinaseSynParams has rate constants for averaging over activations
 // at different time scales, to produce the running average activation
-// values that then drive learning in the XCAL learning rules.
-// Is driven directly by spikes that increment running-average at super-short
-// timescale.  Time cycle of 50 msec quarters / theta window learning works
-// Cyc:50, SS:35 S:8, M:40 (best)
-// Cyc:25, SS:20, S:4, M:20
+// values that then drive learning.
 type KinaseSynParams struct {
 	Rule    KinaseRules `desc:"which learning rule to use"`
 	SpikeG  float32     `def:"20,8,200" desc:"spiking gain for Spk rules"`
@@ -246,7 +239,7 @@ func (kp *KinaseSynParams) Update() {
 }
 
 func (kp *KinaseSynParams) Defaults() {
-	kp.Rule = SynSpkCaOR
+	kp.Rule = SynSpkCa
 	kp.SpikeG = 8 // 200 // 8
 	kp.SBonus = 500
 	kp.SAvgThr = 0.02
@@ -302,14 +295,20 @@ func (kp *KinaseParams) Step(c *KinaseState, nrn *axon.Neuron, nex *NeuronEx, ca
 
 	switch kp.SynCa.Rule {
 	case NeurSpkCa:
-		// todo: don't have presynaptic neuron here.
-	case SynSpkCaOR:
+		spk := kp.SynCa.SpikeG * nex.PreSpike
+		kp.SynCa.FmCa(spk, &c.SCaM, &c.SCaP, &c.SCaD)
+		spk = kp.SynCa.SpikeG * nrn.Spike
+		kp.SynCa.FmCa(spk, &c.RCaM, &c.RCaP, &c.RCaD)
+		c.CaM = c.RCaM * c.SCaM
+		c.CaP = c.RCaP * c.SCaP
+		c.CaD = c.RCaD * c.SCaD
+	case SynSpkCa:
 		spk := float32(0)
 		if nrn.Spike > 0 || nex.PreSpike > 0 {
 			spk = kp.SynCa.SpikeG
 		}
 		kp.SynCa.FmCa(spk, &c.CaM, &c.CaP, &c.CaD)
-	case SynSpkNMDAOR:
+	case SynSpkNMDA:
 		spk := float32(0)
 		if nrn.Spike > 0 || nex.PreSpike > 0 {
 			spk = kp.SynCa.SpikeG
