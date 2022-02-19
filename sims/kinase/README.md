@@ -225,6 +225,15 @@ Versions are noted by their Go emer/axon tag (bumping to 1.3.1 as start of the K
 * Optimization: 
 
 
+## v1.3.4
+
+* Explored many params on `SpkNMDACa` in `ra25` -- MgC 1.4, Voff=5 def better on PCA, CaThr = .2 best, Dend Exp = .6, R = 5 is best.  VGCCCa 20 vs. 0 doesn't seem that different.
+
+## v.1.3.5
+
+* TODO: consider some combination of function of overall CaMKII level, and the error-driven diff -- e.g. multiply two factors?  something.. basically need to figure out how to get the STDP result plus the err diff, and perhaps have some additional mechanism of differentiation -- the biophysically grounded mech is pretty good overall, but CHL `NeurSpkCa` does better for avoiding hogging..
+
+
 # Urakubo
 
 * Urakubo, H., Honda, M., Froemke, R. C., & Kuroda, S. (2008). Requirement of an allosteric kinetics of NMDA receptors for spike timing-dependent plasticity. The Journal of Neuroscience, 28(13), 3310–3323. http://www.ncbi.nlm.nih.gov/pubmed/18367598 | [Main PDF](https://github.com/emer/axon/blob/master/examples/urakubo/papers/UrakuboHondaFroemkeEtAl08.pdf) | [Supplemental PDF](https://github.com/emer/axon/blob/master/examples/urakubo/papers/UrakuboHondaFroemkeEtAl08_suppl.pdf) | [Model Details](https://github.com/emer/axon/blob/master/examples/urakubo/papers/UrakuboHondaFroemkeEtAl08_model_sup.pdf) (last one has all the key details but a few typos and the code is needed to get all the details right).
