@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-/*
-kinase: This simulation replicates the Kinase et al, 2008 detailed model of spike-driven
-learning, including intracellular Ca-driven signaling, involving CaMKII, CaN, PKA, PP1.
-*/
 package main
 
 import (
@@ -25,12 +21,12 @@ var ParamSets = params.Sets{
 			{Sel: "Layer", Desc: "all defaults",
 				Params: params.Params{
 					"Layer.Act.Spike.Tr":     "7",
-					"Layer.Act.Spike.RTau":   "3",    // maybe could go a bit wider even
-					"Layer.Act.NMDA.MgC":     "0.42", // def 0.28
-					"Layer.Act.Decay.Glong":  "0.6",  // 0.6
-					"Layer.Act.Dend.GbarExp": "0.5",  // 0.2 > 0.1 > 0
-					"Layer.Act.Dend.GbarR":   "6",    // 3 > 2 good for 0.2 -- too low rel to ExpGbar causes fast ini learning, but then unravels
-					"Layer.Act.Dt.VmDendTau": "5",    // 5 > 2.81 here but small effect
+					"Layer.Act.Spike.RTau":   "3", // maybe could go a bit wider even
+					"Layer.Act.NMDA.MgC":     "1.14",
+					"Layer.Act.Decay.Glong":  "0.6", // 0.6
+					"Layer.Act.Dend.GbarExp": "0.5", // 0.2 > 0.1 > 0
+					"Layer.Act.Dend.GbarR":   "6",   // 3 > 2 good for 0.2 -- too low rel to ExpGbar causes fast ini learning, but then unravels
+					"Layer.Act.Dt.VmDendTau": "5",   // 5 > 2.81 here but small effect
 					"Layer.Act.Dt.GeTau":     "5",
 					"Layer.Act.Dt.VmTau":     "1",
 					"Layer.Act.Dt.VmSteps":   "2",

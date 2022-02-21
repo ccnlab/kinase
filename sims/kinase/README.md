@@ -64,7 +64,7 @@ The CHL product-based learning rule is a function of the difference between the 
 
 For the rate-code activations in Leabra, the product of these averages is likely to be similar to the average of the products at a synapse level, and computing neuron-level values is *much* faster computationally than integrating the products at the synapse level.  Indeed, experiments (a long time ago) showed no advantages to doing the synapse-level integration in Leabra.
 
-# KinaseB*: Working up by simplifying the Urakubo model
+# KinaseBx: Working up by simplifying the Urakubo model
 
 To tackle the bottom-up approach toward deriving Kinase learning rules, we need to dramatically simplify the highly detailed Urakubo mechanisms into something that can be computed efficiently in large scale models.  This has turned out to be *much* simpler than originally estimated, with very simple exponential integration equations giving remarkably accurate approximations.  Furthermore, the critical synaptic Ca signal can be computed via an entirely factorized set of equations that depend separately on pre and post spiking, which is surprising.
 
@@ -123,11 +123,13 @@ Despite all the positive developments above, there is a major unresolved issue i
 
 TODO: explain and deal with this.  Issue is NMDA (and GABAB) for bistability vs. learning.
 
-First step: just use Vm instead of VmDend (with a flag), and see how that does using full bio abstracted Ca signals per above.
+VmDend works where Vm does not.
 
 ## KinaseB1: SynNMDACa
 
-The above approximations are all implemented efficiently through separate pre and postsynaptic variables, that are multiplied at the synaptic level to generate an accurate reflection of the synaptic Ca signal as would be given in the Urakubo model.  The `SynNMDACa` learning rule (aka KinaseB1) then simply runs the cascading integrators for CaP and CaD on top of this Ca signal, to get a learning rule.  Note that the first stage CaM signal is intended to capture Ca itself, so the time constant of integration for this level should be 1, when using this biologically-based Ca signal.
+The above approximations are all implemented efficiently through separate pre and postsynaptic variables, that are multiplied at the synaptic level to generate an accurate reflection of the synaptic Ca signal as would be given in the Urakubo model.  The `SynNMDACa` learning rule (aka KinaseB1) then simply runs the cascading integrators for CaP and CaD on top of this Ca signal, to get a learning rule.  Note that the first stage CaM signal is intended to capture Ca itself, so the time constant of integration for this level should be 1, when using this biologically-based Ca signal.  However, using a small additional integration, around 5 or so, seems to work better.
+
+Also, still using the LearnNow at end of theta cycle for the time being -- that is a separate thread.
 
 ![SynNMDACa PSD_Ca thetaerr learning](results/fig_kinase_synnmdaca_thetaerr_nrep100_isi08_psdca.png?raw=true "SynNMDACa learning behavior, driven by PSD_Ca, in ThetaErrSweep @ 100 reps, SpikeG = 1, MTau = 1, PTau = 40, DTau = 40, DScale = 1.")
 
@@ -155,10 +157,11 @@ TODO: redo thetaerr sweep results!
 
 TODO: kinca VGCC rgclamp looks a lot better -- compare on raw Ca values.
 
-
 # KinaseAMax behavior
 
 ## SynSpkCa
+
+TODO: redo with CaM product version
 
 See [kinaseq](https://github.com/emer/axon/tree/master/examples/kinaseq) model for more discussion and analysis of the `SynSpkCa` learning rule relative to the `NeurSpkCa` abstract case.
 
@@ -190,15 +193,35 @@ The original "product of averages" `NeurSpkCa` learning rule produces an overall
 
 Further, the above plot shows the comparison against the Urakubo PSD_Ca signal for this `NeurSpkCa` case -- it is very far off from capturing the detailed Ca dynamics.
 
-## RA25, Objrec, LVis sim results
+# RA25, Objrec, LVis sim results
 
-This is the most abstract, pragmatic starting model, using same SS, S, M cascading running-average computation on top of synaptic Ca computed directly from NMDA channels and VmDend, etc (same as used for driving good activation dynamics).  Learning automatically happens at end of ThetaCycle.
+Versions are noted by their Go emer/axon tag (bumping to 1.3.1 as start of the Kinase era).  In reverse chronological order..
 
-Versions are noted by their Go emer/axon tag (bumping to 1.3.1 as start of the Kinase era).
+## v.1.3.5
+
+* TODO: consider some combination of function of overall CaMKII level, and the error-driven diff -- e.g. multiply two factors?  something.. basically need to figure out how to get the STDP result plus the err diff, and perhaps have some additional mechanism of differentiation -- the biophysically grounded mech is pretty good overall, but CHL `NeurSpkCa` does better for avoiding hogging..
+
+## v1.3.3, .4
+
+* Explored many params on `SynNMDACa` in `ra25` -- `MgC 1.4, Voff=5` def better on PCA, `CaThr = .2` best, `Dend Exp = .6, R = 5` is best.  VGCCCa 20 vs. 0 doesn't seem that different.  Despite improvements, `SynNMDACa` remains about 2x worse on PCA Top5 values compared to ra25.  `objrec` is better but still fails.
+
+* Could not get `SpkSpkCa` as an "OR" function to learn at all -- too non-product-y: This rule simply says that there is a "synaptic" spike impulse whenever *either* the pre or post: `SynSpk = SSpk || RSpk` -- either spike counts, but there is no specific interaction.  This SynSpk value then drives the same cascade of time integrations, as usual, with the first CaM stage with a Tau of 10 giving a reasonable approximation of the Urakubo Ca.  See `results/fig_kinase_synspkca_thetaerr_nrep3_isi01.png`
+
+* In non-tagged subsequent commits all with local `ra25` testing: Tried various ways of incorporating the XCal function into SynNMDACa, with no benefits noted.  Remembered the key feature of XCal, that the checkmark is driven by `CaP` levels, so when this goes down near 0 in plus phase, no learning happens.  This is the `LrnM` param in neuron-level `SpkCa` params.  However, using `MTau=10` `PTau=40` instead of the reverse could obviate the need for this.  TODO: test this more systematically.
+
+* Developed first-pass on *product-based* `SynSpkCa` which uses the product of decaying neuron-level `CaM` values as the initial synaptic Ca driver function.  This works well on `ra25` and shows good PCA Top5 performance -- investigating this one further.
+
+* TODO: `SynNMDACa` should be using Urakbuo ITau=100, Tau=30 dynamics for *sender* NMDA used in learning!  This is not currently the case!
+
+## v1.3.2
+
+* Added `Dend.CaThr` on post-norm Ca (renamed Jca -> RCa) -- creates more differentiation on the recv side.  Reflects the effects of buffering.  
 
 ## v1.3.1
 
-* Urakubo-matching allosteric NMDA dynamics do NOT work well for soft bistability dynamic -- Inhib causes too much noise, like synaptic failure.  May work well at larger scale.  Sticking with `Tau = 100, MgC = 1, ITau = 1` (disabled).  Also `SnmdaDeplete` and `SeiDeplete` off -- also major source of noise, as discussed here: https://github.com/emer/axon/issues/28#issuecomment-1032297427
+Explored `SynNMDACa` across ra25, objrec, lvis models:
+
+* Urakubo-matching allosteric NMDA dynamics do NOT work well for soft bistability dynamic in terms of Tau and Inhib causes too much noise, like synaptic failure.  May work well at larger scale.  Sticking with `Tau = 100, MgC = 1, ITau = 1` (disabled).  Also `SnmdaDeplete` and `SeiDeplete` off -- also major source of noise, as discussed here: https://github.com/emer/axon/issues/28#issuecomment-1032297427
 
 * First thing I tried worked really well: Basic default `40/10/40` taus for `CaM, CaP, CaD` cascade, `DScale=0.93`, `MinLrn=0.02`, `Lrate.Base=0.005`.
 
@@ -208,7 +231,7 @@ Versions are noted by their Go emer/axon tag (bumping to 1.3.1 as start of the K
 
 * Overall, the pattern of weight change across recv neurons is very homogenous -- really need more of a postsynaptic selection factor.  VGCC?
 
-* `lvis/sims/objrec` is showing significant hogging -- learns quickly then dies with hogging.  The lack of differentiation on recv side is clearly an issue.  
+* `lvis/sims/objrec` and big lvis CU3D are showing significant hogging -- learns quickly then dies with hogging.  The lack of differentiation on recv side is clearly an issue.  
 
 * Some issues: 
 
@@ -216,25 +239,11 @@ Versions are noted by their Go emer/axon tag (bumping to 1.3.1 as start of the K
 
     + `VmDend` is a major issue too -- stays relatively high, reducing differentiation, MgG is kind of high baseline level for everything.
     
-    + About 10x slower overall performance-wise -- 
-    
-## v1.3.2
+    + About 10x slower overall performance-wise..
 
-* Added `Dend.CaThr` on post-norm Ca (renamed Jca -> RCa) -- creates more differentiation on the recv side.  Reflects the effects of buffering.
+# KinaseBMax: Fully biophysical DAPK1 vs. CaMKII competition at N2B binding
 
-* Optimization: 
-
-
-## v1.3.4
-
-* Explored many params on `SpkNMDACa` in `ra25` -- MgC 1.4, Voff=5 def better on PCA, CaThr = .2 best, Dend Exp = .6, R = 5 is best.  VGCCCa 20 vs. 0 doesn't seem that different.
-
-## v.1.3.5
-
-* TODO: consider some combination of function of overall CaMKII level, and the error-driven diff -- e.g. multiply two factors?  something.. basically need to figure out how to get the STDP result plus the err diff, and perhaps have some additional mechanism of differentiation -- the biophysically grounded mech is pretty good overall, but CHL `NeurSpkCa` does better for avoiding hogging..
-
-
-# Urakubo
+This thread represents the attempt to modify the full Urakubo biophysical model by adding detailed DAPK1 and N2B binding dynamics.
 
 * Urakubo, H., Honda, M., Froemke, R. C., & Kuroda, S. (2008). Requirement of an allosteric kinetics of NMDA receptors for spike timing-dependent plasticity. The Journal of Neuroscience, 28(13), 3310–3323. http://www.ncbi.nlm.nih.gov/pubmed/18367598 | [Main PDF](https://github.com/emer/axon/blob/master/examples/urakubo/papers/UrakuboHondaFroemkeEtAl08.pdf) | [Supplemental PDF](https://github.com/emer/axon/blob/master/examples/urakubo/papers/UrakuboHondaFroemkeEtAl08_suppl.pdf) | [Model Details](https://github.com/emer/axon/blob/master/examples/urakubo/papers/UrakuboHondaFroemkeEtAl08_model_sup.pdf) (last one has all the key details but a few typos and the code is needed to get all the details right).
 
