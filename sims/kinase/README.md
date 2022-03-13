@@ -1,14 +1,60 @@
 # Kinase
 
-This model is developing a new learning mechanisms based on the interactions between two kinases: CaMKII and DAPK1, which promote LTP and LTD respectively.   Computationally, DAPK1 represents the minus phase, and CaMKII represents the plus phase, with the subtractive relationship as expressed in the CHL learning algorithm:
+The Kinase learning framework is a stack of neocortical learning mechanisms at multiple levels of biological detail / computational abstraction.
 
+At the highest level of abstraction is the contrastive hebbian learning (CHL) algorithm:
 ```
     dW = (X^+ Y^+) - (X^- Y^-)
 ```
+where X = sending activation, Y = receiving, and superscripts indicate *plus phase* (outcome, target state) and *minus phase* (prediction, guess state) respectively.
 
-Where X = sending activation, Y = receiving, and superscripts indicate plus phase (outcome, target state) and minus phase (prediction, guess state) respectively.
+Computationally, this form of learning rule can be derived directly from error backpropagation, by way of the GeneRec (generalized recirculation) derivation (O'Reilly, 1996) and from the Boltzmann machine framework based on statistical physics principles (Ackley, Hinton & Sejnowski, 1986), and a number of other related derivations (Lee & Seung, ??; Bengio, ??).  It is one of several different potential contenders for how the brain might implement error-driven learning (EDL) (Whittington & Bogacz, 2017; etc).
 
-The recent data from the Zito lab confirms the basic predictions of this learning rule, but many questions remain about the detailed underlying mechanisms and computational implications.
+At a biological level, the fact that there are two terms in the CHL equation, each representing a classic Hebbian co-product of sender times receiver, provides some promise of a plausible biological mechanisms.  However, accounting for the subtraction between these two terms represents a significant challenge.  In a broader biologically-based framework developed around this learning mechanism, the subtraction takes place implicitly at each synapse, over the course of a few hundred milliseconds, where the state of the entire cortical network transitions from representing a prediction or initial guess-like state (minus phase), to representing the actual outcome in the plus phase (O'Reilly & Munakata, 2000; O'Reilly et al, 2014; etc).  As such, CHL represents a *temporal derivative* of the network activity state across this timescale (which corresponds to roughly the theta cycle).
+
+We are now strongly motivated to develop a deeper understanding of possible biological mechanisms, based on recent data from the Zito lab which confirms that the classic CA3 -> CA1 synapse used in many LTP / LTD experiments exhibits this CHL-based learning dynamic.  Specifically, by systematically manipulating the activity of presynaptic and postsynaptic neurons over the course of a 200 msec window, transitioning between different rates of firing in the minus then plus phases (each 100 msec in the experiment), we found that the resulting changes in synaptic efficacy are well-described by the CHL equation above.  Remarkably, this includes stable firing at 25hz, 50hz and even 100hz across the entire 200 msec window, which CHL predicts should result in no net weight change.  Furthermore, when the neural firing pattern transitioned from a higher rate of roughly 50hz down to 25hz in the plus phase, a statistically highly significant pattern of LTD (long term depresssion) was observed.  Finally, the opposite pattern of 25hz going up to 50hz resulted in reliable LTP.
+
+The standard existing frameworks for LTP and LTD involve functions of total amounts of intracellular Ca (calcium) ions in the postsynaptic spine, entering via NMDA channels and voltage-gated calcium channels (VGCC) (std cites).  None of these models would predict the results observed in the Zito lab experiments.  Furthermore, we re-implemented the highly biophysically detailed model of Urakubo et al (2008) (see [urakubo](https://github.com/ccnlab/kinase/tree/main/sims/urakubo) on github), which captures a wide range of spike-timing dependent plasticity (STDP) phenomena using well-validated biochemical mechanisms, and found that it does not produce the CHL pattern.
+
+Thus, the central questions addressed here are:
+
+* What set of biochemically-based mechanisms might plausibly implement a CHL-like learning rule?
+
+* How well do these more biological mechanisms work, in biophysically realistic spiking neural networks, specifically using the [axon](https://github.com/emer/axon) framework that uses standard conductance-based neural equations and has already been shown to support a form of CHL-based learning that works effectively in large-scale deep neural networks.
+
+## The Kinase Competition Hypothesis
+
+Our central hypothesis, which works effectively at multiple levels of biochemical detail, is that the critical subtraction at the heart of the CHL equation reflects the competition between two kinases that each respond to the influx of Ca: CaMKII and DAPK1.  These two kinases compete for binding at the NMDA N2B binding site, and they have been shown to promote LTP and LTD respectively (Bayer et al papers).  Thus, in terms of CHL, DAPK1 represents the minus phase and drives LTD, while CaMKII represents the plus phase and drives LTP, and *the relative strength of the N2B binding of these two kinases determines which way the synaptic strength changes*.
+
+In addition to the presence of a competitive, subtractive relationship between these kinases, the CHL rule requires that the minus phase (DAPK1) component be sensitive to the earlier *prediction* phase of neural activity, while the plus phase (CaMKII) reflects more of the subsequent *outcome* phase of neural activity.  This can happen naturally if DAPK1 has a slower overall activation and binding dynamic, so it retains a significant trace from earlier activity states, while CaMKII is faster and thus preferentially reflects more recent activity.  The use of integrators with slower and faster time constants to compute a temporal derivative has been suggested in various other neural domains (cites -- Barto TD model).
+
+Finally, there must be some way for the temporal derivative mechanism to align properly with the timing of network states that actually correspond to a prediction vs. an outcome.  What kind of biological signal causes learning to take place after the plus phase of activity, as opposed to a reversed sequence of an outcome phase followed by a subsequent prediction phase?  Is there some distinctive neural signature that marks these phases so that the proper alignment occurs with sufficient reliability to drive effective learning?
+
+Our hypothesis here is that, at the level of individual synapses, the conjunction of significant pre and postsynaptic activity is sufficiently rare, such that there are typically relatively brief windows of neural activity followed by relative inactivity, and that it is this *transition to inactivity* that marks the end of a prior plus phase.
+
+Specifically, we hypothesize that the CaMKII and DAPK1 competitive binding dynamic takes place when there is a relatively high level of Ca and activated calmodulin (CaM) in a relatively brief window after synaptic activity, and that once this activity falls off, DAPK1 returns to its baseline state while CaMKII that has been bound to N2B remains active for a sufficient duration to trigger the AMPA receptor trafficking dynamics that result in actual changes in synaptic efficacy.  This process takes time, and requires relative DAPK1 inactivation to proceed, so it preferentially occurs during the transition to inactivity after a learning episode.  Whatever final state the CaMKII vs. DAPK1 competition was in at the point of this transition determines the resulting LTP vs. LTD direction.
+
+This biologically-based dynamic has been implemented at multiple levels of biological detail (leveraging detailed fits and simplifications of the Urakubo et al, 2008 model), and extensive testing shows that it does indeed function effectively as an error-driven learning algorithm in large-scale deep spiking networks.  We begin by describing the most computationally abstract such model, followed by more detailed ones.
+
+# SynSpkCa: Abstract Continuous Spiking-driven Kinase Learning
+
+![SynSpkCa LTD](figs/fig_synspk_trial_dmaxpct5_twin10_50_25hz.png?raw=true "SynSpkCa with a 50hz minus phase followed by 25hz plus phase, showing how it drives LTD.")
+
+The above figure shows the `SynSpkCa` learning mechanism generating an appropriate LTD weight change (DWt) in response to a 50hz then 25hz minus-plus activity pattern, across 200 msec, followed by a window of synaptic inactivity.
+
+The pre and post spikes each equivalently generate a burst of `Ca` influx, which then decays exponentially over time.  The `CaM` variable integrates this raw `Ca` signal with a time constant of 10 msec, and the `CaP` variable, which represents potentiation and thus CaMKII, integrates over `CaM` in a cascaded manner, with a time constant of 40 msec.  Finally the `CaD` depression variable, which represents DAPK1, integrates over `CaP` with a further 40 msec time constant.  These cascaded exponential integrators accurately reflect the dynamics of these kinases, as shown below.
+
+As the figure shows, the difference between `CaP - CaD` is initially positive, but when the rate of spiking slows down from 50hz to 25hz in the plus phase (2nd half of the 200 msec window), this difference turns negative.  The `TDWt` variable is updated within a window of 10 msec after any synaptic spike, to reflect the difference `CaP - CaD`.
+
+The `CaDMax` variable tracks the maximum level of `CaD`, and when the current level of `CaD` falls below a given fraction of that maximum level, we assume that there has been a sufficiently quiet window for AMPA receptor trafficking to take place in proportion to the final TDWt value that was computed.  Computationally, this is reflected in the update of the `DWt` variable from `TDWt`.  At this point, everything is reset for this synapse, and the process is ready to engage again for the next window of significant synaptic activity.
+
+![SynSpkCa LTP](figs/fig_synspk_trial_dmaxpct5_twin10_25_50hz.png?raw=true "SynSpkCa with a 25hz minus phase followed by 50hz plus phase, showing how it drives LTP.")
+
+The above figure shows how an activity pattern with 50hz firing in the plus phase relative to 25hz minus phase activity drives LTP, through the same mechanisms.
+
+TODO: show summary figure of DWt, etc.
+
+# Old text below:
 
 The model is being developed at multiple levels, with the two overarching goals of understanding biological mechanisms and exploring computational implications / advantages thereof.
 
@@ -197,7 +243,25 @@ Further, the above plot shows the comparison against the Urakubo PSD_Ca signal f
 
 Versions are noted by their Go emer/axon tag (bumping to 1.3.1 as start of the Kinase era).  In reverse chronological order..
 
-## v.1.3.5
+## v.1.3.5 - .8
+
+### objrec SynSpkCa
+
+* `MgC=1, Voff=0, GgbarExp=0.2, GbarR=3` is faster at first then goes bad at end, vs new standard of `MgC=1.4, Voff=5, GgbarExp=0.5, GbarR=6`  but after tuning params, `GbarExp=0.2, GbarR=3` is better than .5, 6.
+
+* `SpikeG=12, Lrate=0.1` is best vs. .05, .08 (too slow) and .15, .2 (too fast).  Can double SpikeG and halve lrate, and vice-versa, but need to adjust XCal PThrMin.
+
+* `XCal PThrMin=0.05` is best overall -- 0.1 has sig slower initial learning, 0.02 worse overall.
+
+* `Kinase.OptInteg` works well but strangely only if `Layer.Learn.SpikeCa.LrnThr = 0.01` which is also faster. Theoretically higher thr should be faster but maybe the resulting worse learning is worse overall.
+
+* `XCal.LrnThr=0.05` (by accident) is sig worse in objrec (was default in 1.3.7) but makes no diff in lvis apparently.  
+
+### lvis SynSpkCa
+
+* `SpikeCa.LrnDt=30` may be slight better than 40?  opposite is true in objrec, but very small diffs.
+
+* PCA scores are much lower but this is likely due to `XCal.PThrMin` because `NeurSpkCa` also shows it.
 
 * TODO: consider some combination of function of overall CaMKII level, and the error-driven diff -- e.g. multiply two factors?  something.. basically need to figure out how to get the STDP result plus the err diff, and perhaps have some additional mechanism of differentiation -- the biophysically grounded mech is pretty good overall, but CHL `NeurSpkCa` does better for avoiding hogging..
 
