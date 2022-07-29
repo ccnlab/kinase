@@ -17,7 +17,6 @@ import (
 
 	"github.com/emer/axon/axon"
 	"github.com/emer/axon/chans"
-	"github.com/emer/emergent/chem"
 	"github.com/emer/emergent/emer"
 	"github.com/emer/emergent/netview"
 	"github.com/emer/emergent/params"
@@ -46,8 +45,6 @@ const LogPrec = 6
 // SimOpts has high-level simulation options that are accessed in the code
 type SimOpts struct {
 	InitBaseline bool `def:"true" desc:"use 500 sec pre-compiled baseline for initialization"`
-	UseN2B       bool `def:"true" desc:"use the GluN2B binding for CaMKII dynamics -- explicitly breaks out this binding and its consequences for localizing CaMKII in the PSD, but without UseDAPK1, it should replicate original Urakubo dynamics, as it does not include any competition there."`
-	UseDAPK1     bool `desc:"use the DAPK1 competitive GluN2B binding (departs from standard Urakubo -- otherwise the same."`
 }
 
 // TheOpts are the global sim options
@@ -55,8 +52,6 @@ var TheOpts SimOpts
 
 func (so *SimOpts) Defaults() {
 	so.InitBaseline = true
-	so.UseN2B = true
-	so.UseDAPK1 = true
 }
 
 // ParamSets for basic parameters
@@ -131,11 +126,6 @@ type Sim struct {
 	DeltaTInc   int                      `desc:"increment for sweep of DeltaT"`
 	RGClamp     bool                     `desc:"use Ge current clamping instead of distrete pulsing for firing rate-based manips, e.g., ThetaErr"`
 	Opts        SimOpts                  `view:"inline" desc:"global simulation options controlling major differences in behavior"`
-	GluN2BN     float64                  `desc:"total initial amount of GluN2B"`
-	DAPK1AutoK  float64                  `desc:"strength of AutoK autophosphorylation of DAPK1 -- must be strong enough to balance CaM drive"`
-	DAPK1_AMPAR float64                  `desc:"strength of AMPAR inhibitory effect from DAPK1"`
-	DAPK1lrate  float64                  `desc:"multiplier for diff between DAPK1 and CaMKII"`
-	CaNDAPK1    float64                  `desc:"Km for the CaM dephosphorylation of DAPK1"`
 	VmDend      bool                     `desc:"use dendritic Vm signal for driving spine channels"`
 	NMDAAxon    bool                     `desc:"use the Axon NMDA channel instead of the allosteric Urakubo one"`
 	NMDAGbar    float32                  `def:"0,0.15" desc:"strength of NMDA current -- 0.15 default for posterior cortex"`
@@ -189,11 +179,6 @@ func (ss *Sim) New() {
 func (ss *Sim) Defaults() {
 	ss.Opts.Defaults()
 	ss.Spine.Defaults()
-	ss.GluN2BN = 2
-	ss.DAPK1AutoK = DAPK1AutoK
-	ss.DAPK1_AMPAR = ss.Spine.AMPAR.Phos.DAPK1_AMPAR
-	ss.DAPK1lrate = ss.Spine.AMPAR.Phos.DAPK1lrate
-	ss.CaNDAPK1 = 11
 	ss.GeStim = 2
 	ss.NMDAGbar = 0.15 // 0.1 to 0.15 matches pre-spike increase in vm
 	ss.GABABGbar = 0.0 // 0.2
@@ -319,11 +304,6 @@ func (ss *Sim) SetParamsSet(setNm string, sheet string, setMsg bool) error {
 // and resets the epoch log table
 func (ss *Sim) Init() {
 	TheOpts = ss.Opts
-	ss.Spine.AMPAR.Phos.DAPK1_AMPAR = ss.DAPK1_AMPAR
-	ss.Spine.AMPAR.Phos.DAPK1lrate = ss.DAPK1lrate
-	DAPK1AutoK = ss.DAPK1AutoK
-	ss.Spine.NMDAR.GluN2BN = chem.CoToN(ss.GluN2BN, PSDVol)             // 120 works for N2B only (no DAPK1)
-	ss.Spine.DAPK1.CaNSer308.SetKmVol(ss.CaNDAPK1, CytVol, 1.34, 0.335) // 10: 11 μM Km = 0.0031724
 	ss.Spine.Init()
 	ss.InitWt = ss.Spine.States.AMPAR.Trp.Tot
 	ss.NeuronEx.Init()
@@ -350,7 +330,7 @@ func (ss *Sim) Counters() string {
 
 func (ss *Sim) UpdateView() {
 	if ss.NetView != nil && ss.NetView.IsVisible() {
-		ss.NetView.Record(ss.Counters())
+		ss.NetView.Record(ss.Counters(), 0)
 		// note: essential to use Go version of update when called from another goroutine
 		ss.NetView.GoUpdate() // note: using counters is significantly slower..
 	}
@@ -380,22 +360,19 @@ func (ss *Sim) NeuronUpdt(msec int, ge, gi float32) {
 	vbio := chans.VToBio(nrn.Vm) // dend
 
 	// note: Ge should only
+	geExt := float32(0)
 	nrn.GeRaw = ge
 	ly.Act.Dt.GeSynFmRaw(nrn.GeRaw, &nrn.GeSyn, ly.Act.Init.Ge)
 	nrn.Ge = nrn.GeSyn
 	nrn.Gi = gi
-	nrn.NMDA = ly.Act.NMDA.NMDA(nrn.NMDA, nrn.GeRaw, 1)
-	nrn.Gnmda = ly.Act.NMDA.Gnmda(nrn.NMDA, nrn.VmDend) // gbar = 0 if !NMDAAxon
+	ly.Act.NMDAFmRaw(nrn, geExt)
+	ly.Act.GvgccFmVm(nrn)
+	ly.Learn.LrnNMDAFmRaw(nrn, geExt)
 	nrn.GABAB, nrn.GABABx = ly.Act.GABAB.GABAB(nrn.GABAB, nrn.GABABx, nrn.Gi)
 	nrn.GgabaB = ly.Act.GABAB.GgabaB(nrn.GABAB, nrn.VmDend)
 
-	nex.Gvgcc = ss.VGCC.Gvgcc(nrn.VmDend, nex.VGCCm, nex.VGCCh)
-	dm, dh := ss.VGCC.DMHFmV(nrn.VmDend, nex.VGCCm, nex.VGCCh)
-	nex.VGCCm += dm
-	nex.VGCCh += dh
-
 	nex.Gak = ss.AK.Gak(nex.AKm, nex.AKh)
-	dm, dh = ss.AK.DMHFmV(nrn.VmDend, nex.AKm, nex.AKh)
+	dm, dh := ss.AK.DMHFmV(nrn.VmDend, nex.AKm, nex.AKh)
 	nex.AKm += dm
 	nex.AKh += dh
 
@@ -501,7 +478,7 @@ func (ss *Sim) LogTime(dt *etable.Table, row int) {
 	dt.SetCellFloat("ISI", row, float64(nrn.ISI))
 	dt.SetCellFloat("AvgISI", row, float64(nrn.ISIAvg))
 	dt.SetCellFloat("VmDend", row, float64(nrn.VmDend))
-	dt.SetCellFloat("NMDA", row, float64(nrn.NMDA))
+	dt.SetCellFloat("SnmdaO", row, float64(nrn.SnmdaO))
 	dt.SetCellFloat("Gnmda", row, float64(nrn.Gnmda))
 	dt.SetCellFloat("GABAB", row, float64(nrn.GABAB))
 	dt.SetCellFloat("GgabaB", row, float64(nrn.GgabaB))
@@ -596,12 +573,6 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.SetColParams("Cyt_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_AC1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_CaMKIIact", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("PSD_CaMKIIn2b", eplot.On, eplot.FixMin, 0, eplot.FixMax, 10)
-	if ss.Opts.UseDAPK1 {
-		plt.SetColParams("PSD_DAPK1act", eplot.On, eplot.FixMin, 0, eplot.FloatMax, 1)
-		plt.SetColParams("Cyt_DAPK1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-		plt.SetColParams("PSD_DAPK1n2b", eplot.On, eplot.FixMin, 0, eplot.FixMax, 10)
-	}
 	plt.SetColParams("PSD_PP1act", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("PSD_CaNact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Cyt_CaMKIIact", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
@@ -924,7 +895,7 @@ func (ss *Sim) ConfigGui() *gi.Window {
 
 	gi.SetAppName("urakubo")
 	gi.SetAppAbout(`This simulation replicates the Urakubo et al, 2008 biophysical model of LTP / LTD.
-See <a href="https://github.com/emer/axon/blob/master/examples/urakubo/README.md">README.md on GitHub</a>.</p>`)
+See <a href="https://github.com/ccnlab/kinase/blob/master/sims/urakubo/README.md">README.md on GitHub</a>.</p>`)
 
 	win := gi.NewMainWindow("urakubo", "Urakubo", width, height)
 	ss.Win = win
@@ -1051,7 +1022,7 @@ See <a href="https://github.com/emer/axon/blob/master/examples/urakubo/README.md
 
 	tbar.AddAction(gi.ActOpts{Label: "README", Icon: "file-markdown", Tooltip: "Opens your browser on the README file that contains instructions for how to run this model."}, win.This(),
 		func(recv, send ki.Ki, sig int64, data interface{}) {
-			gi.OpenURL("https://github.com/emer/axon/blob/master/examples/urakubo/README.md")
+			gi.OpenURL("https://github.com/ccnlab/kinase/blob/master/sims/urakubo/README.md")
 		})
 
 	vp.UpdateEndNoSig(updt)

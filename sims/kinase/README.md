@@ -1,5 +1,9 @@
 # Kinase
 
+See [kinaseq](https://github.com/emer/axon/tree/master/examples/kinaseq) and [axon](https://github.com/emer/axon) for implemented versions of these learning mechanisms.  This [repository](https://github.com/ccnlab/kinase) has the most biologically detailed version of the Kinase learning mechanism, and provides this README and papers describing the kinase model.
+
+## Introduction
+
 The Kinase learning framework is a stack of neocortical learning mechanisms at multiple levels of biological detail / computational abstraction.
 
 At the highest level of abstraction is the contrastive hebbian learning (CHL) algorithm:
@@ -34,7 +38,7 @@ Our hypothesis here is that, at the level of individual synapses, the conjunctio
 
 Specifically, we hypothesize that the CaMKII and DAPK1 competitive binding dynamic takes place when there is a relatively high level of Ca and activated calmodulin (CaM) in a relatively brief window after synaptic activity, and that once this activity falls off, DAPK1 returns to its baseline state while CaMKII that has been bound to N2B remains active for a sufficient duration to trigger the AMPA receptor trafficking dynamics that result in actual changes in synaptic efficacy.  This process takes time, and requires relative DAPK1 inactivation to proceed, so it preferentially occurs during the transition to inactivity after a learning episode.  Whatever final state the CaMKII vs. DAPK1 competition was in at the point of this transition determines the resulting LTP vs. LTD direction.
 
-This biologically-based dynamic has been implemented at multiple levels of biological detail (leveraging detailed fits and simplifications of the Urakubo et al, 2008 model), and extensive testing shows that it does indeed function effectively as an error-driven learning algorithm in large-scale deep spiking networks.  We begin by describing the most computationally abstract such model, followed by more detailed ones.  Here are the different variations available:
+This biologically-based dynamic has been implemented at multiple levels of biological detail (leveraging detailed fits and simplifications of the Urakubo et al, 2008 model), and extensive testing shows that it does indeed function effectively as an error-driven learning algorithm in large-scale deep spiking networks.  We begin by describing the most computationally abstract continuous-time model (SynSpkCont), followed by the other ones.  Here are the different variations available, all but the last of which are implemented in [axon](https://github.com/emer/axon).
 
 * **SynSpkCont**: Synaptic-level Ca signals at an abstract level, purely driven by spikes, not NMDA channel Ca, and continuous learning (no arbitrary ThetaCycle boundaries).  There is an option here to compare with SynSpkTheta by only doing DWt updates at the theta cycle level, in which case the key difference is the use of temporary DWt signals based on a window around spikes, which can remove some variability associated with the arbitrary timing of the end of trials.
 
@@ -43,6 +47,8 @@ This biologically-based dynamic has been implemented at multiple levels of biolo
 * **SynSpkTheta**: Synaptic-level abstract spike-driven Ca, with learning occuring only at ThetaCycle boundaries.  This can be highly optimized and exhibits good learning performance.
 
 * **NeurSpkTheta**: Neuron-level abstract spike-driven Ca, with synapse-level Ca computed at the end of a ThetaCycle as a product of the time-averaged values integrated separately at the pre and postsynaptic neurons.  This is the fastest computationally as it does not require any synapse-level integration of Ca, but its learning performance is worse than SynSpkTheta.
+
+* **Kinase**: Is the most biologically detailed model built upon the Urakubo et al (2008) model -- it is a standalone model of a single dendritic spine and its associated pre and postsynaptic neural context, which runs at a very fine grained timescale and involves hundreds of state variables, and is thus not practical for use in large-scale models.  It is [here](https://github.com/ccnlab/kinase/tree/main/sims/kinase) in the repository of this README file, and is currently (March 2022) very much a work in progress.
 
 # SynSpkCont: Abstract Continuous Spiking-driven Kinase Learning
 

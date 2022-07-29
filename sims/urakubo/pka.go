@@ -60,41 +60,22 @@ func (ps *PKAVars) Init(vol float64) {
 	ps.PDEcAMPC = 0
 
 	if TheOpts.InitBaseline {
-		if TheOpts.UseDAPK1 {
-			ps.AC1 = chem.CoToN(2, vol)
-			ps.AC1act = chem.CoToN(0.0001493, vol)
-			ps.CAMP = chem.CoToN(0.00348, vol)
-			ps.R2C2 = chem.CoToN(1.995, vol)
-			ps.R2C2_B = chem.CoToN(0.005108, vol)
-			ps.R2C2_BB = chem.CoToN(3.252e-06, vol)
-			ps.R2C2_AB = chem.CoToN(6.838e-06, vol)
-			ps.R2C2_ABB = chem.CoToN(6.864e-09, vol)
-			ps.R2C2_4 = chem.CoToN(1.687e-12, vol)
-			ps.R2C_3 = chem.CoToN(8.993e-09, vol)
-			ps.R2C_4 = chem.CoToN(8.646e-11, vol)
-			ps.R2_3 = chem.CoToN(4.549e-09, vol)
-			ps.R2_4 = chem.CoToN(4.217e-09, vol)
-			ps.PKAact = chem.CoToN(0.04114, vol)
-			ps.AC1ATPC = chem.CoToN(1313, vol)
-			ps.PDEcAMPC = chem.CoToN(0.000348, vol)
-		} else {
-			ps.AC1act = chem.CoToN(0.0004371, vol)
-			ps.CAMP = chem.CoToN(0.005518, vol)
-			ps.R2C2 = chem.CoToN(1.978, vol)
-			ps.R2C2_B = chem.CoToN(0.02181, vol)
-			ps.R2C2_BB = chem.CoToN(6.006e-05, vol)
-			ps.R2C2_AB = chem.CoToN(4.814e-05, vol)
-			ps.R2C2_ABB = chem.CoToN(2.635e-07, vol)
-			ps.R2C2_4 = chem.CoToN(2.859e-10, vol)
+		ps.AC1act = chem.CoToN(0.0002385, vol)
+		ps.CAMP = chem.CoToN(0.004477, vol)
+		ps.R2C2 = chem.CoToN(1.982, vol)
+		ps.R2C2_B = chem.CoToN(0.01775, vol)
+		ps.R2C2_BB = chem.CoToN(3.973e-05, vol)
+		ps.R2C2_AB = chem.CoToN(3.179e-05, vol)
+		ps.R2C2_ABB = chem.CoToN(1.423e-07, vol)
+		ps.R2C2_4 = chem.CoToN(1.274e-10, vol)
 
-			ps.R2C_3 = chem.CoToN(1.162e-06, vol)
-			ps.R2C_4 = chem.CoToN(1.271e-07, vol)
-			ps.R2_3 = chem.CoToN(1.295e-06, vol)
-			ps.R2_4 = chem.CoToN(1.423e-05, vol)
-			ps.PKAact = chem.CoToN(0.04461, vol)
-			ps.AC1ATPC = chem.CoToN(3.832e+05, vol)
-			ps.PDEcAMPC = chem.CoToN(0.0005518, vol)
-		}
+		ps.R2C_3 = chem.CoToN(6.304e-07, vol)
+		ps.R2C_4 = chem.CoToN(5.645e-08, vol)
+		ps.R2_3 = chem.CoToN(6.981e-07, vol)
+		ps.R2_4 = chem.CoToN(6.251e-06, vol)
+		ps.PKAact = chem.CoToN(0.04515, vol)
+		ps.AC1ATPC = chem.CoToN(2.335e+05, vol)
+		ps.PDEcAMPC = chem.CoToN(0.0004477, vol)
 	}
 }
 
@@ -192,6 +173,10 @@ type PKAState struct {
 func (ps *PKAState) Init() {
 	ps.Cyt.Init(CytVol)
 	ps.PSD.Init(PSDVol)
+
+	vol := float64(PSDVol)
+	ps.PSD.AC1act = chem.CoToN(0.0003286, vol)
+	ps.PSD.AC1ATPC = chem.CoToN(3.214e+05, vol)
 }
 
 func (ps *PKAState) InitCode() {

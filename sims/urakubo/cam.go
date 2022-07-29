@@ -30,10 +30,10 @@ func (cs *CaMVars) Init(vol float64) {
 	cs.CaM[0] = chem.CoToN(80, vol)
 
 	if TheOpts.InitBaseline {
-		cs.CaM[0] = chem.CoToN(89.2, vol)     // orig: 80
-		cs.CaM[1] = chem.CoToN(1.142, vol)    // orig: 0
-		cs.CaM[2] = chem.CoToN(0.007617, vol) // orig: 0
-		cs.CaM[3] = chem.CoToN(3.654-05, vol) // orig: 0
+		cs.CaM[0] = chem.CoToN(78.31, vol)
+		cs.CaM[1] = chem.CoToN(1.002, vol)
+		cs.CaM[2] = chem.CoToN(0.006681, vol)
+		cs.CaM[3] = chem.CoToN(1.988e-05, vol)
 	}
 }
 
@@ -87,24 +87,8 @@ func (cs *CaMState) Init() {
 	cs.PSD.Init(PSDVol)
 
 	if TheOpts.InitBaseline {
-		if TheOpts.UseDAPK1 {
-			vol := float64(CytVol)
-			cs.Cyt.CaM[0] = chem.CoToN(77.64, vol)
-			cs.Cyt.CaM[1] = chem.CoToN(0.9937, vol)
-			cs.Cyt.CaM[2] = chem.CoToN(0.00662, vol)
-			cs.Cyt.CaM[3] = chem.CoToN(1.233e-05, vol)
-			vol = PSDVol
-			cs.PSD.CaM[0] = chem.CoToN(77.64, vol)
-			cs.PSD.CaM[1] = chem.CoToN(0.9938, vol)
-			cs.PSD.CaM[2] = chem.CoToN(0.00662, vol)
-			cs.PSD.CaM[3] = chem.CoToN(1.246e-05, vol)
-		} else {
-
-		}
-		vol := float64(CytVol)
-		cs.Cyt.CaM[3] = chem.CoToN(3.645e-05, vol)
-		vol = PSDVol
-		cs.PSD.CaM[3] = chem.CoToN(4.852e-05, vol)
+		vol := float64(PSDVol)
+		cs.PSD.CaM[3] = chem.CoToN(2.738e-05, vol)
 	}
 }
 
