@@ -54,54 +54,6 @@ func (so *SimOpts) Defaults() {
 	so.InitBaseline = true
 }
 
-// ParamSets for basic parameters
-// Base is always applied, and others can be optionally selected to apply on top of that
-var ParamSets = params.Sets{
-	{Name: "Base", Desc: "these are the best params", Sheets: params.Sheets{
-		"Network": &params.Sheet{
-			{Sel: "Layer", Desc: "all defaults",
-				Params: params.Params{
-					"Layer.Act.Spike.Tr":     "7",
-					"Layer.Act.Spike.RTau":   "3", // maybe could go a bit wider even
-					"Layer.Act.Dt.VmTau":     "1",
-					"Layer.Act.Dt.VmDendTau": "1",
-					"Layer.Act.Dt.VmSteps":   "2",
-					"Layer.Act.Dt.GeTau":     "1",    // not natural but fits spike current injection
-					"Layer.Act.VmRange.Max":  "0.97", // max for dendrite
-					"Layer.Act.Spike.ExpThr": "0.9",  // note: critical to keep < Max!
-					// Erev = .35 = -65 instead of -70
-					"Layer.Act.Spike.Thr": ".55", // also bump up
-					"Layer.Act.Spike.VmR": ".45",
-					"Layer.Act.Init.Vm":   ".35",
-					"Layer.Act.Erev.L":    ".35",
-				}},
-		},
-	}},
-}
-
-// Extra state for neuron -- VGCC and AK
-type NeuronEx struct {
-	Gvgcc      float32 `desc:"VGCC total conductance"`
-	VGCCm      float32 `desc:"VGCC M gate -- activates with increasing Vm"`
-	VGCCh      float32 `desc:"VGCC H gate -- deactivates with increasing Vm"`
-	VGCCJcaPSD float32 `desc:"VGCC Ca calcium contribution to PSD"`
-	VGCCJcaCyt float32 `desc:"VGCC Ca calcium contribution to Cyt"`
-	Gak        float32 `desc:"AK total conductance"`
-	AKm        float32 `desc:"AK M gate -- activates with increasing Vm"`
-	AKh        float32 `desc:"AK H gate -- deactivates with increasing Vm"`
-}
-
-func (nex *NeuronEx) Init() {
-	nex.Gvgcc = 0
-	nex.VGCCm = 0
-	nex.VGCCh = 1
-	nex.VGCCJcaPSD = 0
-	nex.VGCCJcaCyt = 0
-	nex.Gak = 0
-	nex.AKm = 0
-	nex.AKh = 1
-}
-
 // Sim encapsulates the entire simulation model, and we define all the
 // functionality as methods on this struct.  This structure keeps all relevant
 // state information organized and available without having to pass everything around
@@ -111,7 +63,7 @@ type Sim struct {
 	Net         *axon.Network            `view:"no-inline" desc:"the network -- click to view / edit parameters for layers, prjns, etc"`
 	Spine       Spine                    `desc:"the spine state with Urakubo intracellular model"`
 	Neuron      *axon.Neuron             `view:"no-inline" desc:"the neuron"`
-	NeuronEx    NeuronEx                 `view:"no-inline" desc:"extra neuron state for additional channels: VGCC, AK"`
+	NeuronEx    NeuronEx                 `view:"no-inline" desc:"extra neuron state for additional channels: Vgcc, AK"`
 	Params      params.Sets              `view:"no-inline" desc:"full collection of param sets"`
 	Stim        Stims                    `desc:"what stimulation to drive with"`
 	ISISec      float64                  `desc:"inter-stimulus-interval in seconds -- between reps"`
@@ -130,8 +82,7 @@ type Sim struct {
 	NMDAAxon    bool                     `desc:"use the Axon NMDA channel instead of the allosteric Urakubo one"`
 	NMDAGbar    float32                  `def:"0,0.15" desc:"strength of NMDA current -- 0.15 default for posterior cortex"`
 	GABABGbar   float32                  `def:"0,0.2" desc:"strength of GABAB current -- 0.2 default for posterior cortex"`
-	VGCC        chans.VGCCParams         `desc:"VGCC parameters: set Gbar > 0 to include"`
-	AK          chans.AKParams           `desc:"A-type potassium channel parameters: set Gbar > 0 to include"`
+	VgccGbar    float32                  `def:"0,0.12" desc:"strength of Vgcc current -- 0.12 default for posterior cortex"`
 	CaTarg      CaState                  `desc:"target calcium level for CaTarg stim"`
 	InitWt      float64                  `inactive:"+" desc:"initial weight value: Trp_AMPA value at baseline"`
 	Logs        map[string]*etable.Table `view:"no-inline" desc:"all logs"`
@@ -182,10 +133,7 @@ func (ss *Sim) Defaults() {
 	ss.GeStim = 2
 	ss.NMDAGbar = 0.15 // 0.1 to 0.15 matches pre-spike increase in vm
 	ss.GABABGbar = 0.0 // 0.2
-	ss.VGCC.Defaults()
-	ss.VGCC.Gbar = 0.12 // 0.12 matches vgcc jca
-	ss.AK.Defaults()
-	ss.AK.Gbar = 0 // todo: figure this out!
+	ss.VgccGbar = 0.12
 	ss.CaTarg.Cyt = 10
 	ss.CaTarg.PSD = 10
 }
@@ -316,6 +264,7 @@ func (ss *Sim) Init() {
 		ly.Act.NMDA.Gbar = 0
 	}
 	ly.Act.GABAB.Gbar = ss.GABABGbar
+	ly.Act.VGCC.Gbar = ss.VgccGbar
 	ss.InitWts(ss.Net)
 	ss.StopNow = false
 	ss.UpdateView()
@@ -370,27 +319,22 @@ func (ss *Sim) NeuronUpdt(msec int, ge, gi float32) {
 	ly.Learn.LrnNMDAFmRaw(nrn, geExt)
 	nrn.GABAB, nrn.GABABx = ly.Act.GABAB.GABAB(nrn.GABAB, nrn.GABABx, nrn.Gi)
 	nrn.GgabaB = ly.Act.GABAB.GgabaB(nrn.GABAB, nrn.VmDend)
-
-	nex.Gak = ss.AK.Gak(nex.AKm, nex.AKh)
-	dm, dh := ss.AK.DMHFmV(nrn.VmDend, nex.AKm, nex.AKh)
-	nex.AKm += dm
-	nex.AKh += dh
-
-	nrn.Gk += nex.Gak
-	nrn.Ge += nex.Gvgcc + nrn.Gnmda
+	nrn.Gak = ly.Act.AK.Gak(nrn.VmDend)
+	nrn.Gk += nrn.Gak
+	nrn.Ge += nrn.Gvgcc + nrn.Gnmda
 	if !ss.NMDAAxon {
 		nrn.Ge += ss.NMDAGbar * float32(ss.Spine.States.NMDAR.G)
 	}
 	nrn.Gi += nrn.GgabaB
 
 	// todo: Ca from NMDAAxon
-	ss.Spine.Ca.SetInject(float64(nex.VGCCJcaPSD), float64(nex.VGCCJcaCyt))
+	ss.Spine.Ca.SetInject(float64(nex.VgccJcaPSD), float64(nex.VgccJcaCyt))
 
 	psd_pca := float32(1.7927e5 * 0.04) //  SVR_PSD
 	cyt_pca := float32(1.0426e5 * 0.04) // SVR_CYT
 
-	nex.VGCCJcaPSD = -vbio * psd_pca * nex.Gvgcc
-	nex.VGCCJcaCyt = -vbio * cyt_pca * nex.Gvgcc
+	nex.VgccJcaPSD = -vbio * psd_pca * nrn.Gvgcc
+	nex.VgccJcaCyt = -vbio * cyt_pca * nrn.Gvgcc
 
 	ss.Spine.States.VmS = float64(vbio)
 
@@ -482,12 +426,12 @@ func (ss *Sim) LogTime(dt *etable.Table, row int) {
 	dt.SetCellFloat("Gnmda", row, float64(nrn.Gnmda))
 	dt.SetCellFloat("GABAB", row, float64(nrn.GABAB))
 	dt.SetCellFloat("GgabaB", row, float64(nrn.GgabaB))
-	dt.SetCellFloat("Gvgcc", row, float64(nex.Gvgcc))
-	dt.SetCellFloat("VGCCm", row, float64(nex.VGCCm))
-	dt.SetCellFloat("VGCCh", row, float64(nex.VGCCh))
-	dt.SetCellFloat("VGCCJcaPSD", row, float64(nex.VGCCJcaPSD))
-	dt.SetCellFloat("VGCCJcaCyt", row, float64(nex.VGCCJcaCyt))
-	dt.SetCellFloat("Gak", row, float64(nex.Gak))
+	dt.SetCellFloat("Gvgcc", row, float64(nrn.Gvgcc))
+	dt.SetCellFloat("VgccM", row, float64(nrn.VgccM))
+	dt.SetCellFloat("VgccH", row, float64(nrn.VgccH))
+	dt.SetCellFloat("VgccJcaPSD", row, float64(nex.VgccJcaPSD))
+	dt.SetCellFloat("VgccJcaCyt", row, float64(nex.VgccJcaCyt))
+	dt.SetCellFloat("Gak", row, float64(nrn.Gak))
 	dt.SetCellFloat("AKm", row, float64(nex.AKm))
 	dt.SetCellFloat("AKh", row, float64(nex.AKh))
 
@@ -516,10 +460,10 @@ func (ss *Sim) ConfigTimeLog(dt *etable.Table) {
 		{"GABAB", etensor.FLOAT64, nil, nil},
 		{"GgabaB", etensor.FLOAT64, nil, nil},
 		{"Gvgcc", etensor.FLOAT64, nil, nil},
-		{"VGCCm", etensor.FLOAT64, nil, nil},
-		{"VGCCh", etensor.FLOAT64, nil, nil},
-		{"VGCCJcaPSD", etensor.FLOAT64, nil, nil},
-		{"VGCCJcaCyt", etensor.FLOAT64, nil, nil},
+		{"Vgccm", etensor.FLOAT64, nil, nil},
+		{"Vgcch", etensor.FLOAT64, nil, nil},
+		{"VgccJcaPSD", etensor.FLOAT64, nil, nil},
+		{"VgccJcaCyt", etensor.FLOAT64, nil, nil},
 		{"Gak", etensor.FLOAT64, nil, nil},
 		{"AKm", etensor.FLOAT64, nil, nil},
 		{"AKh", etensor.FLOAT64, nil, nil},
@@ -551,10 +495,10 @@ func (ss *Sim) ConfigTimePlot(plt *eplot.Plot2D, dt *etable.Table) *eplot.Plot2D
 	plt.SetColParams("GABAB", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("GgabaB", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Gvgcc", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("VGCCm", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("VGCCh", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("VGCCJcaPSD", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
-	plt.SetColParams("VGCCJcaCyt", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("Vgccm", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("Vgcch", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("VgccJcaPSD", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
+	plt.SetColParams("VgccJcaCyt", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("Gak", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("AKm", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
 	plt.SetColParams("AKh", eplot.Off, eplot.FixMin, 0, eplot.FloatMax, 1)
@@ -807,8 +751,8 @@ var GeneColMap = map[string]string{
 	"I1_active.Co14":       "36 PSD_I1P",
 	"Internal_AMPAR.Co16":  "40 Int_AMPAR",
 	"Jca27":                "13 NMDA_Jca",
-	"Jca31":                "17 PSD_VGCC_Jca",
-	"Jca32":                "18 Cyt_VGCC_Jca",
+	"Jca31":                "17 PSD_Vgcc_Jca",
+	"Jca32":                "18 Cyt_Vgcc_Jca",
 	"Ji29":                 "17 NMDA_Ji",
 	"Memb_AMPAR.Co17":      "41 Mbr_AMPAR",
 	"Mg30":                 "11 NMDA_Mg",
